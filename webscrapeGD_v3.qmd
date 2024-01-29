@@ -1,0 +1,135 @@
+---
+title: "webscrapeGD_v2"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(stringr) 
+library(xml2)
+library(rvest) 
+library(dplyr)
+library(jsonlite)
+library(RSelenium)
+
+ExtractGDPage <- function(page_source) {
+  page <- read_html(page_source)
+  # extract review JSON
+  content <- page %>% 
+    html_node(xpath = "//*[@id='Container']/div/div[1]/div[2]/main/script[2]") %>% 
+    html_text()
+  
+  # extract review ID's to collect corresponding dates
+  review_ids <- page %>%
+    html_nodes(xpath = '//*[contains(@id, "empReview_")]') %>%
+    html_attr('id')
+  #create date xpaths
+  date_xpaths <- paste0('//*[@id="', review_ids, '"]/div/div/div/div[2]/div[1]/div[2]/div/span')
+  
+  #extract dates
+  dates <- sapply(date_xpaths, function(xpath) {
+    page %>%
+      html_node(xpath = xpath) %>%
+      html_text(trim = TRUE)
+  })
+
+  #convert review jsons
+  review_df <- fromJSON(content)
+
+  # convert and add dates
+  extracted_dates <- unname(dates)
+  reviews <- review_df %>% 
+    mutate(date = extracted_dates) %>% 
+    unnest()
+
+  return(reviews)
+}
+
+```
+
+```{r}
+
+
+rD <- rsDriver(port = 4568L, browser = "firefox", verbose = FALSE) #, port = 4567L)j
+
+remDr <- rD[["client"]]
+
+
+
+remDr$navigate("https://www.glassdoor.ca/Reviews/ExxonMobil-Reviews-E237.htm?filter.iso3Language=eng")
+Sys.sleep(5)
+
+page_source <- remDr$getPageSource()
+
+ExtractGDPage(page_source[[1]])
+
+
+next_button <- remDr$findElement(
+  using = 'xpath',
+  value = "//button[contains(@class, 'nextButton') and not(contains(@class, 'disabled'))]"
+)
+next_button$click()
+
+page_source <- remDr$getPageSource()
+
+ExtractGDPage(page_source[[1]])
+
+
+base_url <- "https://www.glassdoor.ca/Reviews/ExxonMobil-Reviews-E237_P"
+suffix <- ".htm?filter.iso3Language=eng"
+
+# Initialize an empty list to store URLs
+page_urls <- vector("list", 719)
+
+# Generate URLs for each page
+for (page_number in 1:719) {
+    page_urls[[page_number]] <- paste0(base_url, page_number, suffix)
+}
+
+# If you need it as a vector instead of a list
+page_urls <- unlist(page_urls)
+
+page_urls[[719]]
+
+
+remDr$navigate(page_urls[[719]])
+
+Sys.sleep(3)
+
+page_source <- remDr$getPageSource()
+
+ExtractGDPage(page_source[[1]])
+
+
+all_reviews <- data.frame()
+
+# Iterate over each URL
+for (url in page_urls) {
+  remDr$navigate(url)
+  Sys.sleep(runif(1, min = 5, max = 15))
+  page_source <- remDr$getPageSource()
+  reviews <- ExtractGDPage(page_source[[1]])
+  all_reviews <- rbind(all_reviews, reviews)
+  }
+
+write_csv(all_reviews, 'exxonmobil.csv')
+
+page_source <- remDr$close()
+
+all_reviews %>% 
+  drop_na() %>% 
+  mutate(ratingValue = as.numeric(ratingValue)) %>% 
+  summarise(mean(ratingValue))
+
+
+exxon <- read_csv('exxonmobil.csv')
+
+exxon %>% 
+  mutate(date = as.Date(date, format = "%b %d, %Y")) %>% 
+  arrange(date)
+
+
+
+
+```
