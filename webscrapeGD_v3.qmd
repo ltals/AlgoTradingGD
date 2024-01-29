@@ -76,24 +76,23 @@ page_source <- remDr$getPageSource()
 ExtractGDPage(page_source[[1]])
 
 
-base_url <- "https://www.glassdoor.ca/Reviews/ExxonMobil-Reviews-E237_P"
+base_url <- "https://www.glassdoor.ca/Reviews/Chevron-Reviews-E13524_P"
 suffix <- ".htm?filter.iso3Language=eng"
 
 # Initialize an empty list to store URLs
-page_urls <- vector("list", 719)
+page_urls <- vector("list", 472)
 
 # Generate URLs for each page
-for (page_number in 1:719) {
+for (page_number in 1:472) {
     page_urls[[page_number]] <- paste0(base_url, page_number, suffix)
 }
 
 # If you need it as a vector instead of a list
 page_urls <- unlist(page_urls)
 
-page_urls[[719]]
 
 
-remDr$navigate(page_urls[[719]])
+remDr$navigate(page_urls[[1]])
 
 Sys.sleep(3)
 
@@ -113,7 +112,7 @@ for (url in page_urls) {
   all_reviews <- rbind(all_reviews, reviews)
   }
 
-write_csv(all_reviews, 'exxonmobil.csv')
+write_csv(all_reviews, 'chevron.csv')
 
 page_source <- remDr$close()
 
@@ -129,6 +128,8 @@ exxon %>%
   mutate(date = as.Date(date, format = "%b %d, %Y")) %>% 
   arrange(date)
 
+
+#page 427; may have double counted
 
 
 
