@@ -13,7 +13,7 @@ library(tidyr)
 library(jsonlite)
 library(stringr)
 
-ScrapeGD <- function(url) {
+ScrapeGD <- function(url, review_count) {
   
   #def page extract tool
   ExtractGDPage <- function(page_source) {
@@ -50,23 +50,10 @@ ScrapeGD <- function(url) {
   }
   
   #initiate selenium
-  rD <- rsDriver(port = 4570L, browser = "firefox", verbose = FALSE)
+  rD <- rsDriver(port = 4585L, browser = "firefox", verbose = FALSE)
   remDr <- rD[["client"]]
   
-  #cleaning url to return base
   cleaned_url <- str_remove(url, "\\.htm.*")
-  #intitialization url to get review total
-  int_url <- paste0(cleaned_url,"_P1.htm?filter.iso3Language=eng")
-  remDr$navigate(int_url)
-  Sys.sleep(runif(1, min = 5, max = 15)) 
-  
-  #review total xpath
-  element <- remDr$findElement(using = 'xpath', value = "//*[@id='Container']/div/div[1]/div[2]/main/div[6]/div/div[2]/span")
-  text_element <- element$getElementText()[[1]]
-  #extraction of review count
-  split <- unlist(strsplit(text_element, " "))
-  review_count <- as.numeric(tail(split, 2)[1])
-  #num pages returned
   num_pages <- ceiling(review_count/10)
 
   all_reviews <- data.frame()
@@ -90,6 +77,6 @@ ScrapeGD <- function(url) {
 }
 
 
-trustscience <- ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm")
+trustscience <- ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm", 17)
 
 ```
