@@ -90,6 +90,6 @@ ScrapeGD <- function(url) {
 }
 
 
-ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm")
+trustscience <- ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm")
 
 ```
