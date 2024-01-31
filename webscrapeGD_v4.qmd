@@ -50,7 +50,7 @@ ScrapeGD <- function(url, review_count) {
   }
   
   #initiate selenium
-  rD <- rsDriver(port = 4585L, browser = "firefox", verbose = FALSE)
+  rD <- rsDriver(port = 4584L, browser = "firefox", verbose = FALSE)
   remDr <- rD[["client"]]
   
   cleaned_url <- str_remove(url, "\\.htm.*")
@@ -71,12 +71,14 @@ ScrapeGD <- function(url, review_count) {
   
   all_reviews <- all_reviews %>% 
     mutate(date = as.Date(date, format = "%b %d, %Y")) %>% 
+    group_by(company) %>% 
     arrange(date)
     
   return(all_reviews)
 }
 
 
-trustscience <- ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm", 17)
+costco  <- ScrapeGD("https://www.glassdoor.ca/Reviews/Costco-Wholesale-Reviews-E2590.htm", 15299)
 
+write.csv(costco, "costco.csv")
 ```
