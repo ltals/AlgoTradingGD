@@ -82,5 +82,22 @@ bing_nlp <- ratings %>%
 ```
 ```{r}
 # now try and get a 3 month rolling average, attach 3 month rolling rating, use those two variables to predict 3 month rolling returns. 
+# Returns Data
+tick <- c('SHEL', 'XOM', 'BP', 'CVX')
+
+prices <- tidyquant::tq_get(tick, get = 'stock.prices', from = '2008-01-01', to = Sys.Date())
+ret <- prices %>% group_by(symbol) %>%  mutate(returns = log(adjusted/lag(adjusted)))
+
+ret %>% filter(date > '2016-01-01') %>% plot_ly(x = ~date,
+                    y = ~adjusted,
+                    color = ~symbol,
+                    type = 'scatter',
+                    mode = 'lines')
+
+ret_nlp <- ret %>% select(date, symbol, returns) %>% 
+  mu
+  
+  
+
 ```
 
