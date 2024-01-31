@@ -95,7 +95,7 @@ bing_nlp <- ratings %>%
 
 ```{r}
 # now try and get a 3 month rolling average, attach 3 month rolling rating, use those two variables to predict 3 month rolling returns. 
-<<<<<<< HEAD
+
 # Returns Data
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
@@ -108,11 +108,11 @@ ret %>% filter(date > '2016-01-01') %>% plot_ly(x = ~date,
                     type = 'scatter',
                     mode = 'lines')
 
-ret_nlp <- ret %>% select(date, symbol, returns) %>% 
+# ret_nlp <- ret %>% select(date, symbol, returns) %>% 
   mu
   
   
-=======
+
 
 library(tidyverse)
 library(zoo)
@@ -174,7 +174,7 @@ retMon4bind <- retMon %>%
 
 review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
 
->>>>>>> 685a40252fcbcda56723e856f4bd5cc1a31ed75b
+
 
 ```
 
