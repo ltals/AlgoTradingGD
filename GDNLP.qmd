@@ -23,24 +23,32 @@ library(zoo)
 library(tidytext)
 library(textdata)
 #connors data load
-bp <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/BP.csv")
-shell <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/Shell.csv")
-exxon <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/exxonmobil.csv")
-chevron <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/chevron.csv")
-bp <- bp %>%  select(-X)
-shell <- shell %>% select(-X)
+bp <- read_csv("BP.csv") %>% 
+  mutate(i = row_number())
+chevron <- read_csv("chevron.csv") %>% 
+  mutate(i = row_number())
+exxon <- read_csv("exxonmobil.csv") %>% 
+  mutate(i = row_number())
+shell <- read_csv("Shell.csv") %>% 
+  mutate(i = row_number())
+
+
+# my os seems to import them as ...1, hence comment out
+bp <- bp %>% 
+  #select(-X)
+  select(-`...1`)
+shell <- shell %>%
+  #select(-X)
+  select(-`...1`)
+
 # prep dataframe
-dflist <- list(bp, shell, exxon, chevron)
-ratings <- rbindlist(dflist, fill = FALSE, idcol = NULL)
+ratings <- rbind(bp, shell, exxon, chevron)
 ratings <- ratings %>%
-  mutate("Company" = name1, 
+  mutate('Company' = name1, 
          'reviewtext' = reviewBody,
          'Rating' = ratingValue,
-          date = case_when(
-          is.na(lubridate::mdy(date)) ~ NA_Date_,
-          TRUE ~ lubridate::mdy(date)
-          )
-          ) %>%
+         #lubridate method was giving a parsing error for 3, this way seems quiter
+          date = as.Date(date, format = "%b %d, %Y")) %>%
           transmute(Company, name, Rating, reviewtext, date)
 ```
 
@@ -49,15 +57,19 @@ ratings <- ratings %>%
 # afinn
 afinn <- tidytext::get_sentiments('afinn')
 
-afinn_nlp <- ratings %>% select(date, Company, reviewtext) %>% filter(date > "2016-01-01") %>% 
+afinn_nlp <- ratings %>%
+  select(date, Company, reviewtext) %>%
+  filter(date > "2016-01-01") %>% 
   unnest_tokens(output = word, input = reviewtext) %>% 
   inner_join(afinn) %>%
-  mutate(month = floor_date(date, unit = 'month')) %>% 
-  group_by(month, Company) %>% summarise(sentiment = mean(value), .groups = 'keep') 
+  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
+  group_by(month, Company) %>%
+  summarise(sentiment = mean(value), .groups = 'keep') 
 
 afinn_nlp %>% 
   ggplot(aes(x = month, y = sentiment, col = Company)) + geom_bar(stat = 'identity') + facet_wrap(~Company)
 ```
+
 ```{r}
 # create sentiment analysis for 3 month rolling average
 bing <- tidytext::get_sentiments('bing')
@@ -68,7 +80,7 @@ bing_nlp <- ratings %>%
   unnest_tokens(output = word, input = reviewtext) %>% 
   anti_join(stop_words) %>% 
   inner_join(bing) %>%
-  mutate(month = floor_date(date, unit = "month")) %>%
+  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>%
   group_by(month, Company, sentiment) %>%
   summarise(count = n(), .groups = 'keep') %>% 
   pivot_wider(names_from = sentiment, values_from = count, values_fill = list(count = 0)) %>% 
@@ -80,8 +92,10 @@ bing_nlp <- ratings %>%
 
 
 ```
+
 ```{r}
 # now try and get a 3 month rolling average, attach 3 month rolling rating, use those two variables to predict 3 month rolling returns. 
+<<<<<<< HEAD
 # Returns Data
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
@@ -98,6 +112,69 @@ ret_nlp <- ret %>% select(date, symbol, returns) %>%
   mu
   
   
+=======
+
+library(tidyverse)
+library(zoo)
+library(lubridate)
+
+rateRollAvg <- rbind(bp, chevron, exxon, shell) %>% 
+  transmute(ratingValue, name, reviewBody, company = name1, date, i) %>%
+  mutate(date = as.Date(date, format = "%b %d, %Y")) %>%
+  drop_na() %>% 
+  arrange(company, date) %>%
+  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
+  group_by(company, month) %>%
+  summarise(meanRateMon = mean(ratingValue)) %>% 
+  group_by(company) %>%
+  mutate(rollAvg3 = rollmean(meanRateMon, 3, fill = NA, align="right")) %>%
+  mutate(rollAvg12 = rollmean(meanRateMon, 12, fill = NA, align="right")) %>% 
+  drop_na() %>% 
+  filter(month > "2015-12-31") %>% 
+  mutate(xOver = case_when(rollAvg3 > rollAvg12 ~ 1,
+                           rollAvg3 <= rollAvg12 ~ 0)) %>% 
+  ungroup() %>% 
+  arrange(month)
+
+
+bing_nlp <- bing_nlp %>% 
+  rename(company = Company)
+afinn_nlp <- afinn_nlp %>% 
+  rename(company = Company)
+
+review_comb <- full_join(rateRollAvg, bing_nlp, by = c('month', 'company'))
+review_comb <- full_join(review_comb, afinn_nlp, by = c('month', 'company'))
+
+```
+
+```{r}
+library(fintool)
+#github: vlahadamis/fintool
+
+
+tick <- c('SHEL', 'XOM', 'BP', 'CVX')
+
+adj_price <- fintool::ezohlc(tick, '2016-02-01', Sys.Date())
+
+retMon <- adj_price %>%
+  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
+  group_by(month, Symbol) %>% 
+  summarise(
+    openMon = first(Open),
+    closeMon = last(Close)) %>% 
+  mutate(retMon = log(closeMon/openMon)) %>% 
+  mutate(company = case_when(Symbol == "BP" ~ "bp",
+                             Symbol == "CVX" ~ "Chevron",
+                             Symbol == "SHEL" ~ "Shell",
+                             Symbol == "XOM" ~ "ExxonMobil"))
+
+# for binding to signal df; hypothesis is that indicators predict returns one month ahead. Thus, for model testing sake we need to subtract one month from return df to bind to indicator df
+retMon4bind <- retMon %>% 
+  mutate(month = (month + days(1)) - months(1) - days(1))
+
+review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
+
+>>>>>>> 685a40252fcbcda56723e856f4bd5cc1a31ed75b
 
 ```
 

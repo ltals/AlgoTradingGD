@@ -1,0 +1,97 @@
+---
+title: "Energy review"
+format: html
+editor: visual
+---
+
+
+```{r}
+library(tidyverse)
+library(zoo)
+library(lubridate)
+
+bp <- read_csv("BP.csv") %>% 
+  select(-`...1`) %>% 
+  mutate(i = row_number())
+
+chevron <- read_csv("chevron.csv") %>% 
+  mutate(i = row_number())
+
+exxon <- read_csv("exxonmobil.csv")%>% 
+  mutate(i = row_number())
+shell <- read_csv("Shell.csv")%>% 
+  select(-`...1`)%>% 
+  mutate(i = row_number())
+
+energy_rev <- rbind(bp, chevron, exxon, shell) %>% 
+  transmute(ratingValue, name, reviewBody, company = name1, date, i) %>%
+  mutate(date = as.Date(date, format = "%b %d, %Y")) %>%
+  drop_na() %>% 
+  arrange(company, date) %>%
+  mutate(date_ym = as.yearmon(date)) %>% 
+  group_by(company, date_ym) %>%
+  summarise(meanRev_mo = mean(ratingValue)) %>% 
+  group_by(company) %>%
+  mutate(rollAvg3 = rollmean(meanRev_mo, 3, fill = NA, align="right")) %>%
+  mutate(rollAvg12 = rollmean(meanRev_mo, 12, fill = NA, align="right")) %>% 
+  drop_na() %>% 
+  filter(date_ym >= "Jan 2015")
+
+
+energy_rev_count <- rbind(bp, chevron, exxon, shell) %>% 
+  transmute(ratingValue, name, reviewBody, company = name1, date, i) %>%
+  mutate(date = as.Date(date, format = "%b %d, %Y")) %>%
+  drop_na() %>% 
+  arrange(company, date) %>%
+  mutate(date_ym = as.yearmon(date)) %>% 
+  group_by(company, date_ym) %>%
+  summarise(meanRev_mo = n()) %>% 
+  filter(date_ym >= "Jan 2015")
+
+plot <- energy_rev %>% 
+  filter(company == "Chevron") %>% 
+  ggplot(aes(x = date_ym)) +
+  geom_line(aes(y = rollAvg3), color = "blue") +
+  geom_line(aes(y = rollAvg12), color = "grey") #+ 
+  geom_line(data = price_cvx, aes(x = date, y = adj), color = "green")
+
+price_cvx <- prices %>% 
+  filter(symbol == 'CVX') %>% 
+  transmute(date, adj = (adjusted/24))
+
+
+plotly::ggplotly(plot)
+
+
+tick <- c('SHEL', 'XOM', 'BP', 'CVX')
+
+prices <- tidyquant::tq_get(tick, get = 'stock.prices', from = '2015-01-01', to = Sys.Date())
+
+
+
+ret <- prices %>% group_by(symbol) %>%  mutate(returns = log(adjusted/lag(adjusted)))
+
+ret %>% filter(date > '2020-01-01') %>% plot_ly(x = ~date,
+                    y = ~adjusted,
+                    color = ~symbol,
+                    type = 'scatter',
+                    mode = 'lines')
+
+
+#need df with returns, average rating, and average sentiment
+energy_rev
+
+library(plotly)
+
+plot_ly(energy_rev, x = ~date_ym) %>%
+  add_lines(y = ~rollAvg3, name = '3-Month Rolling Average', line = list(color = 'blue')) %>%
+  add_lines(y = ~rollAvg12, name = '12-Month Rolling Average', line = list(color = 'red')) %>%
+  layout(title = "3-Month vs 12-Month Rolling Averages",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Revenue"))
+
+plot
+
+
+```
+
