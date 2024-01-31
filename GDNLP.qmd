@@ -1,0 +1,86 @@
+---
+title: "NLPGD"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(tidyquant)
+library(plotly)
+library(data.table)
+library(lubridate)
+library(zoo)
+library(tidytext)
+library(textdata)
+#connors data load
+bp <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/BP.csv")
+shell <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/Shell.csv")
+exxon <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/exxonmobil.csv")
+chevron <- read.csv("C:/Users/conno/OneDrive/Desktop/Winter 24/FAT/GitHub/AlgoTradingGD/AlgoTradingGD/chevron.csv")
+bp <- bp %>%  select(-X)
+shell <- shell %>% select(-X)
+# prep dataframe
+dflist <- list(bp, shell, exxon, chevron)
+ratings <- rbindlist(dflist, fill = FALSE, idcol = NULL)
+ratings <- ratings %>%
+  mutate("Company" = name1, 
+         'reviewtext' = reviewBody,
+         'Rating' = ratingValue,
+          date = case_when(
+          is.na(lubridate::mdy(date)) ~ NA_Date_,
+          TRUE ~ lubridate::mdy(date)
+          )
+          ) %>%
+          transmute(Company, name, Rating, reviewtext, date)
+```
+
+```{r}
+# start playing around with sentiment
+# afinn
+afinn <- tidytext::get_sentiments('afinn')
+
+afinn_nlp <- ratings %>% select(date, Company, reviewtext) %>% filter(date > "2016-01-01") %>% 
+  unnest_tokens(output = word, input = reviewtext) %>% 
+  inner_join(afinn) %>%
+  mutate(month = floor_date(date, unit = 'month')) %>% 
+  group_by(month, Company) %>% summarise(sentiment = mean(value), .groups = 'keep') 
+
+afinn_nlp %>% 
+  ggplot(aes(x = month, y = sentiment, col = Company)) + geom_bar(stat = 'identity') + facet_wrap(~Company)
+```
+```{r}
+# create sentiment analysis for 3 month rolling average
+bing <- tidytext::get_sentiments('bing')
+
+bing_nlp <- ratings %>%
+  select(date, Company, reviewtext) %>%
+  filter(date > "2016-01-01") %>%
+  unnest_tokens(output = word, input = reviewtext) %>% 
+  anti_join(stop_words) %>% 
+  inner_join(bing) %>%
+  mutate(month = floor_date(date, unit = "month")) %>%
+  group_by(month, Company, sentiment) %>%
+  summarise(count = n(), .groups = 'keep') %>% 
+  pivot_wider(names_from = sentiment, values_from = count, values_fill = list(count = 0)) %>% 
+  mutate(total = positive + negative) %>% 
+  mutate(percent_positive = (positive / total) * 100)
+  #ggplot(aes(x = month, y = percent_positive, fill = Company)) +
+  #geom_bar(stat = 'identity', position = 'stack') +
+  #facet_wrap(~Company) + labs(y = 'Percentage Positive', x = '')
+
+
+```
+```{r}
+# now try and get a 3 month rolling average, attach 3 month rolling rating, use those two variables to predict 3 month rolling returns. 
+```
+
