@@ -134,3 +134,154 @@ exxon %>%
 
 
 ```
+
+```{r}
+
+library(tidyverse)
+library(stringr) 
+library(xml2)
+library(rvest) 
+library(dplyr)
+library(jsonlite)
+library(RSelenium)
+
+ExtractGDPage <- function(page_source) {
+  page <- read_html(page_source)
+  # extract review JSON
+  content <- page %>% 
+    html_node(xpath = "//*[@id='Container']/div/div[1]/div[2]/main/script[2]") %>% 
+    html_text()
+  
+  # extract review ID's to collect corresponding dates
+  review_ids <- page %>%
+    html_nodes(xpath = '//*[contains(@id, "empReview_")]') %>%
+    html_attr('id')
+  #create date xpaths
+  date_xpaths <- paste0('//*[@id="', review_ids, '"]/div/div/div/div[2]/div[1]/div[2]/div/span')
+  
+  #extract dates
+  dates <- sapply(date_xpaths, function(xpath) {
+    page %>%
+      html_node(xpath = xpath) %>%
+      html_text(trim = TRUE)
+  })
+
+  #convert review jsons
+  review_df <- fromJSON(content)
+
+  # convert and add dates
+  extracted_dates <- unname(dates)
+  reviews <- review_df %>% 
+    mutate(date = extracted_dates) %>% 
+    unnest()
+
+  return(reviews)
+}
+
+
+```
+
+
+```{r}
+library(RSelenium)
+library(rvest)
+library(xml2)
+library(dplyr)
+library(tidyr)
+library(jsonlite)
+library(stringr)
+
+ScrapeGD <- function(url) {
+  
+  #def page extract tool
+  ExtractGDPage <- function(page_source) {
+  page <- read_html(page_source)
+  # extract review JSON
+  content <- page %>% 
+    html_node(xpath = "//*[@id='Container']/div/div[1]/div[2]/main/script[2]") %>% 
+    html_text()
+  
+  # extract review ID's to collect corresponding dates
+  review_ids <- page %>%
+    html_nodes(xpath = '//*[contains(@id, "empReview_")]') %>%
+    html_attr('id')
+  #create date xpaths
+  date_xpaths <- paste0('//*[@id="', review_ids, '"]/div/div/div/div[2]/div[1]/div[2]/div/span')
+  
+  #extract dates
+  dates <- sapply(date_xpaths, function(xpath) {
+    page %>%
+      html_node(xpath = xpath) %>%
+      html_text(trim = TRUE)
+  })
+
+  #convert review jsons
+  review_df <- fromJSON(content)
+
+  # convert and add dates
+  extracted_dates <- unname(dates)
+  reviews <- review_df %>% 
+    mutate(date = extracted_dates) %>% 
+    unnest()
+
+  return(reviews)
+  }
+  
+  #initiate selenium
+  rD <- rsDriver(port = 4563L, browser = "firefox", verbose = FALSE)
+  remDr <- rD[["client"]]
+  
+  cleaned_url <- str_remove(url, "\\.htm.*")
+  int_url <- paste0(cleaned_url,"_P1.htm?filter.iso3Language=eng")
+  remDr$navigate(int_url)
+  
+  element <- remDr$findElement(using = 'xpath', value = "//*[@id='Container']/div/div[1]/div[2]/main/div[6]/div/div[2]/span")
+  text_element <- element$getElementText()[[1]]
+  review_count <- as.numeric(str_extract(text, "\\d+(?= Reviews)"))
+  num_pages <- ceiling(review_count/10)
+
+  all_reviews <- data.frame()
+
+  for (page_number in 1:num_pages) {
+    full_url <- paste0(cleaned_url, page_number, ".htm?filter.iso3Language=eng")
+    remDr$navigate(full_url)
+    Sys.sleep(runif(1, min = 5, max = 15)) 
+    page_source <- remDr$getPageSource()
+    reviews <- ExtractGDPage(page_source[[1]])
+    all_reviews <- rbind(all_reviews, reviews)
+  }
+  
+  remDr$close()
+  
+  all_reviews <- all_reviews %>% 
+    mutate(date = as.Date(date, format = "%b %d, %Y")) %>% 
+    arrange(date)
+    
+  return(all_reviews)
+}
+
+remDr$close()
+
+
+ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm")
+
+url <- "https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm"
+  int_url <- str_remove(url, "\\.htm.*")
+  int_url <- paste0(cleaned_url,"_P1.htm?filter.iso3Language=eng")
+
+int_url
+
+  rD <- rsDriver(port = 4555L, browser = "firefox", verbose = FALSE)
+  remDr <- rD[["client"]]
+
+
+cleaned_url <- str_remove(url, "\\.htm.*")
+  int_url <- paste0(cleaned_url,"_P1.htm?filter.iso3Language=eng")
+  remDr$navigate(int_url)
+  
+  element <- remDr$findElement(using = 'xpath', value = "//*[@id='Container']/div/div[1]/div[2]/main/div[6]/div/div[2]/span")
+  text_element <- element$getElementText()[[1]]
+  review_count <- as.numeric(str_extract(text, "\\d+(?= Reviews)"))
+  num_pages <- ceiling(review_count/10)
+```
+
