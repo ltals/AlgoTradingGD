@@ -50,7 +50,7 @@ ScrapeGD <- function(url, review_count) {
   }
   
   #initiate selenium
-  rD <- rsDriver(port = 4584L, browser = "firefox", verbose = FALSE)
+  rD <- rsDriver(port = 4586L, browser = "firefox", verbose = FALSE)
   remDr <- rD[["client"]]
   
   cleaned_url <- str_remove(url, "\\.htm.*")
@@ -61,7 +61,7 @@ ScrapeGD <- function(url, review_count) {
   for (page_number in 1:num_pages) {
     full_url <- paste0(cleaned_url,"_P", page_number, ".htm?filter.iso3Language=eng")
     remDr$navigate(full_url)
-    Sys.sleep(runif(1, min = 5, max = 15)) 
+    Sys.sleep(runif(1, min = 5, max = 8)) 
     page_source <- remDr$getPageSource()
     reviews <- ExtractGDPage(page_source[[1]])
     all_reviews <- rbind(all_reviews, reviews)
@@ -70,15 +70,13 @@ ScrapeGD <- function(url, review_count) {
   remDr$close()
   
   all_reviews <- all_reviews %>% 
-    mutate(date = as.Date(date, format = "%b %d, %Y")) %>% 
-    group_by(company) %>% 
-    arrange(date)
+    mutate(date = as.Date(date, format = "%b %d, %Y"))
     
   return(all_reviews)
 }
 
 
-costco  <- ScrapeGD("https://www.glassdoor.ca/Reviews/Costco-Wholesale-Reviews-E2590.htm", 15299)
+ts <- ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm", 17)
 
-write.csv(costco, "costco.csv")
+write.csv(ts, "ts.csv")
 ```
