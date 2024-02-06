@@ -22,6 +22,7 @@ library(lubridate)
 library(zoo)
 library(tidytext)
 library(textdata)
+library(fintool)
 #connors data load
 bp <- read_csv("BP.csv") %>% 
   mutate(i = row_number())
@@ -68,6 +69,16 @@ afinn_nlp <- ratings %>%
 
 afinn_nlp %>% 
   ggplot(aes(x = month, y = sentiment, col = Company)) + geom_bar(stat = 'identity') + facet_wrap(~Company)
+
+
+affin_base <- ratings %>%
+  select(date, Company, reviewtext) %>% 
+  unnest_tokens(output = word, input = reviewtext) %>% 
+  inner_join(afinn) %>% 
+  mutate(y = year(date),
+         q = paste0("Q", quarter(date)," ", y),
+         m = paste0("M", month(date)," ", y)) %>% 
+  rename(company = Company)
 ```
 
 ```{r}
@@ -88,7 +99,18 @@ bing_nlp <- ratings %>%
   mutate(percent_positive = (positive / total) * 100)
   #ggplot(aes(x = month, y = percent_positive, fill = Company)) +
   #geom_bar(stat = 'identity', position = 'stack') +
-  #facet_wrap(~Company) + labs(y = 'Percentage Positive', x = '')
+  #facet_wrap(~Company) + labs(y = 'Percentage Positive', x = '')\
+
+
+bing_base <- ratings %>%
+  select(date, Company, reviewtext) %>%
+  unnest_tokens(output = word, input = reviewtext) %>% 
+  anti_join(stop_words) %>% 
+  inner_join(bing) %>% 
+  mutate(y = year(date),
+         q = paste0("Q", quarter(date)," ", y),
+         m = paste0("M", month(date)," ", y)) %>% 
+  rename(company = Company)
 
 
 ```
@@ -99,20 +121,79 @@ bing_nlp <- ratings %>%
 # Returns Data
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
-prices <- tidyquant::tq_get(tick, get = 'stock.prices', from = '2008-01-01', to = Sys.Date())
-ret <- prices %>% group_by(symbol) %>%  mutate(returns = log(adjusted/lag(adjusted)))
+prices <- tidyquant::tq_get(tick,
+                            get = 'stock.prices',
+                            from = '2013-12-31',
+                            to = Sys.Date())
+ret <- prices %>%
+  group_by(symbol) %>%
+  mutate(returns = log(adjusted/lag(adjusted))) %>% 
+  transmute(date, symbol, returns)
 
-ret %>% filter(date > '2016-01-01') %>% plot_ly(x = ~date,
-                    y = ~adjusted,
-                    color = ~symbol,
-                    type = 'scatter',
-                    mode = 'lines')
+tick <- c('^GSPC')
 
-# ret_nlp <- ret %>% select(date, symbol, returns) %>% 
-  mu
+index <- tidyquant::tq_get(tick,
+                           get = 'stock.prices',
+                           from = '2013-12-31',
+                           to = Sys.Date())
+
+rf <- tidyquant::tq_get("DGS10",
+                           get = "economic.data",
+                           from = '2013-12-31',
+                           to = Sys.Date()) %>% 
+  transmute(date, rf = price/100) %>% 
+  mutate(rf = ((rf + 1)^(1/252)) - 1) %>% 
+  filter()
+
+
+ret_index <- index %>%
+  group_by(symbol) %>%
+  mutate(returns = log(adjusted/lag(adjusted))) %>% 
+  ungroup() %>% 
+  transmute(date, sp500_close = adjusted, sp500_ret = returns)
+
+ret_index <- full_join(rf, ret_index, by = 'date') %>%
+  fill(rf, .direction = "down")
   
-  
+ret_join <- full_join(ret, ret_index, by = 'date') %>% 
+  drop_na()
 
+shell_ret <- ret_join %>% 
+  filter(symbol == "SHEL")
+
+exon_ret <- ret_join %>% 
+  filter(symbol == "XOM")
+  
+bp_ret <- ret_join %>% 
+  filter(symbol == "BP")
+
+chev_ret <- ret_join %>% 
+  filter(symbol == "CVX")
+
+chev_ret <- rollReg(chev_ret, 252, 'sp500_ret', 'returns')
+
+bp_ret <- rollReg(bp_ret, 252, 'sp500_ret', 'returns')
+
+exon_ret <- rollReg(exon_ret, 252, 'sp500_ret', 'returns')
+
+shell_ret <- rollReg(shell_ret, 252, 'sp500_ret', 'returns')
+
+# alpha = Rasset - rf - beta*Rmarket + Beta*rf
+
+ret_join_beta <- rbind(chev_ret, bp_ret, exon_ret, shell_ret)
+
+ret_join_beta <- ret_join_beta %>% 
+  mutate(alpha = returns - rf - slope*sp500_ret + slope*rf) %>% 
+  drop_na() %>%
+  mutate(y = year(date),
+         q = paste0("Q", quarter(date)," ", y),
+         m = paste0("M", month(date)," ", y))
+
+
+
+```
+
+```{r}
 
 library(tidyverse)
 library(zoo)
@@ -145,6 +226,11 @@ afinn_nlp <- afinn_nlp %>%
 review_comb <- full_join(rateRollAvg, bing_nlp, by = c('month', 'company'))
 review_comb <- full_join(review_comb, afinn_nlp, by = c('month', 'company'))
 
+
+
+
+
+
 ```
 
 ```{r}
@@ -173,8 +259,94 @@ retMon4bind <- retMon %>%
   mutate(month = (month + days(1)) - months(1) - days(1))
 
 review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
+```
+
+```{r}
+#reviews as a predictor of alpha in y
+rev_y <- rbind(bp, chevron, exxon, shell) %>% 
+  transmute(ratingValue, name, reviewBody, company = name1, date, i) %>%
+  mutate(date = as.Date(date, format = "%b %d, %Y")) %>%
+  drop_na() %>% 
+  arrange(company, date) %>% 
+  mutate(y = year(date),
+         q = paste0("Q", quarter(date)," ", y),
+         m = paste0("M", month(date)," ", y)) %>% 
+  group_by(y, company) %>% 
+  summarise(mean_value = mean(ratingValue), count = n()) 
+
+affin_y <- affin_base %>% 
+  group_by(company, y) %>% 
+  summarise(sentiment = mean(value))
+
+bing_y <- bing_base %>% 
+  mutate(p_n = case_when(sentiment == 'positive' ~ 1,
+                   sentiment == 'negative' ~ 0,
+                   T ~ NA)) %>% 
+  group_by(company, y) %>% 
+  summarise(prop_postive = mean(p_n))
+  
+indicators_y <- full_join(rev_y, affin_y, by = c("company", "y"))
+indicators_y <- full_join(bing_y, indicators_y, by = c("company", "y"))
 
 
+alpha_y <- ret_join_beta %>% 
+  filter(date >= '2014-12-31',
+         date <= '2024-01-01') %>% 
+  rename(Symbol = symbol) %>% 
+  mutate(company = case_when(Symbol == "BP" ~ "bp",
+                             Symbol == "CVX" ~ "Chevron",
+                             Symbol == "SHEL" ~ "Shell",
+                             Symbol == "XOM" ~ "ExxonMobil")) %>% 
+  ungroup() %>% 
+  select(-Symbol) %>% 
+  group_by(y) %>% 
+  filter(date == max(date)) %>% 
+  ungroup()
+
+alpha_y <- alpha_y %>% 
+  group_by(company) %>% 
+  mutate(returns = log(sp500_close/lag(sp500_close)),
+         rf = ((rf + 1)^(252)) - 1) %>% 
+  mutate(alpha = returns - rf - slope*sp500_ret + slope*rf) %>%
+  mutate(y = y + 1)
+  
+
+comb_y <- full_join(alpha_y, indicators_y, by = c("company", "y")) %>% 
+  transmute(y, company, alpha, prop_postive, mean_value, sentiment) %>% 
+  drop_na()
+
+
+model <- lm(alpha ~ prop_postive + mean_value + sentiment, data = comb_y)
+
+summary(model)
+
+tq_index("^GSPC", get = "stock.prices", from = "2020-01-01", to = "2024-01-01")
+
+sp500_desc <- tidyquant::tq_index("SP500") 
+  #%>% dplyr::filter(!stringr::str_detect(symbol,"BRK.B|BF.B"))
+
+sp400_prices <- tidyquant::tq_get(sort(sp400_desc$symbol),
+                                  #sort(grep(sp400_desc$symbol,pattern = "BRK.B|BF.B|DD", value = TRUE, invert = TRUE)),
+                                  get  = "stock.prices",
+                                  from = "2011-01-01",
+                                  to = Sys.Date())
 
 ```
 
+```{r}
+
+review_comb_bp <- review_comb %>% 
+  filter(company == 'bp')
+
+model <- lm(retMon ~ month + xOver + percent_positive + sentiment, data = r)
+
+summary(model)
+
+review_comb_exxon <- review_comb %>% 
+  filter(company == 'ExxonMobil')
+
+model <- lm(retMon ~ month + rollAvg3 + rollAvg12 + xOver + percent_positive + sentiment, data = review_comb_exxon)
+
+summary(model)
+
+```
