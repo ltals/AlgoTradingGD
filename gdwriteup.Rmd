@@ -1,0 +1,49 @@
+---
+title: "WriteUp"
+author: "Connor Beebe"
+date: "2024-02-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preface
+
+Employees are the heart and soul of a business. Their actions and performance are what drive the profitability of a business and it's ability to maximize shareholder value. In the following document, we look to address the following question:
+
+
+*Is there a relationship between employee sentiment and excess returns?*
+
+By building a webscraping program and applying it to GlassDoor, we were able to compile thousands of employee reviews across a variety of companies:
+
+* ExxonMobil (XOM)
+* Chevron (CVX)
+* Shell (SHEL)
+* BP (BP)
+
+For context on the analysis that occurs below, here is a chart that represents their respective share prices from the last 10 years: 
+
+```{r}
+
+
+
+
+
+
+
+
+
+
+```
+
+We wanted to select companies that all operate in the same industry and differ by market cap. This ensures that our analysis truly represents differentiating factors in relation to excess returns. 
+
+Firstly, we needed to make sense of all the reviews and how best to compile and analyze them. Natural Language processing is the computational analysis of language and speech. This essentially analyzes words and phrases and rates them numerically or categorically based off of the emotion and message they are conveying. Here is a short description of the two methods we applied: 
+
+* Bing: A dataset of 
+
+
+
+

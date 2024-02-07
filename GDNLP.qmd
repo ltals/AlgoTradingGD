@@ -386,7 +386,7 @@ port_y_norm <- port_y %>%
   mutate(weight = comb_sent / sum(comb_sent)) %>% 
   group_by(company)
 
-#close pirces dictate most of the weight in this simple ex. fyi
+#close prices dictate most of the weight in this simple ex. fyi
 weighted_returns <- port_y_norm %>% 
   mutate(w_close = weight*close) %>%
   group_by(date) %>%
@@ -394,6 +394,60 @@ weighted_returns <- port_y_norm %>%
   ungroup() %>% 
   mutate(logRet = log(port_value/lag(port_value))) %>% 
   drop_na()
+
+
+
+```
+```{r}
+# create a weighted portfolio that does not take into account sentiment and backtest it.
+
+# set parameters.
+
+w1 <- 0.25
+w2 <- 0.25
+w3 <- 0.25
+w4 <- 0.25
+
+# write a function that takes the 4 parameters. Do we need to worry about open on the trade date? Depending on position size there could be a big slip, especially pushing 8 trades through when we rebalance. 
+# also need to create a dataframe of different weights to run through and backtest after transitioning to a timetk type object.
+
+
+function(data = train, w1 = 0.25, w2 = 0.25, w3 = 0.25, w4 = 0.25){
+
+data <- port_y_norm %>% select(date, close) %>% 
+  mutate(weights = case_when(company == 'Shell' ~ w1,
+                             company == 'ExxonMobil' ~ w2,
+                             company == 'Chevron' ~ w3,
+                             TRUE ~ w4)) %>% 
+  mutate(trades = case_when(date == '2014-12-31' ~ 1,
+                            TRUE ~ 2)) %>% mutate(w_close = weights*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() 
+
+return(data)
+}
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```
 

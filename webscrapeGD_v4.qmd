@@ -50,7 +50,7 @@ ScrapeGD <- function(url, review_count) {
   }
   
   #initiate selenium
-  rD <- rsDriver(port = 4586L, browser = "firefox", verbose = FALSE)
+rD <- rsDriver(browser = "firefox", chromever = NULL , verbose = FALSE)
   remDr <- rD[["client"]]
   
   cleaned_url <- str_remove(url, "\\.htm.*")
@@ -76,7 +76,6 @@ ScrapeGD <- function(url, review_count) {
 }
 
 
-ts <- ScrapeGD("https://www.glassdoor.ca/Reviews/Trust-Science-Reviews-E1341155.htm", 17)
+sb <- ScrapeGD("https://www.glassdoor.ca/Reviews/Scotiabank-Reviews-E11013.htm", 8762)
 
-write.csv(ts, "ts.csv")
 ```
