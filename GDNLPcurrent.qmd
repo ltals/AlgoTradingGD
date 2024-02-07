@@ -435,7 +435,7 @@ data <- port_y_norm %>% select(date, close) %>%
            TRUE ~ 0 # No change
          )) %>%
   ungroup() %>% 
-  mutate(position = 4) %>% 
+  mutate(position = 4) 
   
 
 #%>% 
@@ -455,23 +455,117 @@ data <- port_y_norm %>% select(date, close) %>%
 
 
 
-port_y_norm <- port_y_norm %>%
-  arrange(company, date) %>% # Ensure data is sorted
-  group_by(company) %>% # Group by company to apply lag within each company
-  mutate(previous_weight = lag(weight), # Create a column for the previous year's weight
+
+trade_func <- function(data = port_y, prop = 2, rate = 2, sent = 2) {
+  port_y_norm <- port_y %>% 
+  #normalizing indicators
+  mutate(mean_rating = mean_rating/5,
+         sentiment = sentiment/5) %>% 
+  transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment, lag_close) %>% 
+  drop_na() %>% 
+  mutate(comb_sent = prop*prop_postive + rate*mean_rating + sent*sentiment,
+         price_norm = 1 / lag_close) %>% 
+  group_by(y) %>% 
+  #weighted sentiment
+  mutate(weight_sent = comb_sent / sum(comb_sent)) %>%
+  #adj for close prices in the prior year
+  mutate(weight = weight_sent*price_norm/sum(price_norm*weight_sent)) %>%
+  arrange(company, date) %>%
+  group_by(company) %>% 
+  mutate(previous_weight = lag(weight), # previous weight
          trades = case_when(
-           date == '2014-12-31' ~ 1, # Starting strategy
-           is.na(previous_weight) ~ NA_real_, # Handle the first row for each company where there's no previous weight
+           date == '2015-12-31' ~ 1, # Starting strategy
+           is.na(previous_weight) ~ NA_real_, # Handle the first row 
            weight < previous_weight ~ -1, # Selling
            weight > previous_weight ~ 1, # Buying
            TRUE ~ 0 # No change
          )) %>%
-  ungroup() 
+  ungroup() %>% 
+  mutate(position = 4)
+  
+  weighted_returns <- port_y_norm %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() %>% 
+  summarise(sum = sum(logRet)) %>% 
+  mutate(prcnt_ret = (exp(sum) - 1)*100) 
+  
+    return(weighted_returns) 
+  }
 
 
+out <- expand.grid(
+  prop = seq(from = 0, to = 1, by = .05),
+  rate = seq(from = 0, to = 1, by = .05),
+  sent = seq(from = 0, to = 1, by = .05)) %>% 
+  mutate(total = prop + rate + sent) %>% 
+  filter(total == 1)
+  
 
+# system.time({ <expression> })
+library(foreach)
+library(doParallel)
+# Detect the number of cores on your computer
+n_cores <- detectCores() - 1
+# Assign cores and register the cluster
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+# Loop using multipe clusters
+res <- foreach(
+  i = 1:nrow(out),
+  .combine = "cbind",
+  .packages = c(
+    "tidyverse",
+    "RTL",
+    "timetk",
+    "tidyquant",
+    "PerformanceAnalytics"
+  )
+) %dopar% {
+  as.numeric(RTL::tradeStats(
+    strategy(data_curr = train_cur,
+             data_signal = train_sig,
+             out[i, "roc1"],
+             out[i, "roc2"],
+             out[i, "alpha"],
+             out[i, "beta"])%>% dplyr::select(date, ret)
+  ))
+}
+stopCluster(cl)
 
+# system.time({ <expression> })
+library(foreach)
+library(doParallel)
+# Detect the number of cores on your computer
+n_cores <- detectCores() - 1
+# Assign cores and register the cluster
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
 
+res <- foreach(
+  i = 1:nrow(out),
+  .combine = "cbind",
+  .packages = c(
+    "tidyverse",
+    "RTL",
+    "timetk",
+    "tidyquant",
+    "PerformanceAnalytics"
+  )
+) %dopar% {
+  as.numeric(RTL::tradeStats(
+    strategy(data_curr = train_cur,
+             data_signal = train_sig,
+             out[i, "roc1"],
+             out[i, "roc2"],
+             out[i, "alpha"],
+             out[i, "beta"])%>% dplyr::select(date, ret)
+  ))
+}
+stopCluster(cl)
 
 
 
