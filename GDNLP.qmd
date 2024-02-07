@@ -23,7 +23,8 @@ library(zoo)
 library(tidytext)
 library(textdata)
 library(fintool)
-#connors data load
+#github: jvlahadamis/fintool
+
 bp <- read_csv("BP.csv") %>% 
   mutate(i = row_number())
 chevron <- read_csv("chevron.csv") %>% 
@@ -70,15 +71,18 @@ afinn_nlp <- ratings %>%
 afinn_nlp %>% 
   ggplot(aes(x = month, y = sentiment, col = Company)) + geom_bar(stat = 'identity') + facet_wrap(~Company)
 
-
+#unsummarised base files used to compare models with different return windows
 affin_base <- ratings %>%
   select(date, Company, reviewtext) %>% 
   unnest_tokens(output = word, input = reviewtext) %>% 
   inner_join(afinn) %>% 
   mutate(y = year(date),
-         q = paste0("Q", quarter(date)," ", y),
-         m = paste0("M", month(date)," ", y)) %>% 
+         q = paste0(y, quarter(date)),
+         m = paste0(y, month(date))) %>% 
   rename(company = Company)
+
+
+min(afinn$value)
 ```
 
 ```{r}
@@ -108,16 +112,26 @@ bing_base <- ratings %>%
   anti_join(stop_words) %>% 
   inner_join(bing) %>% 
   mutate(y = year(date),
-         q = paste0("Q", quarter(date)," ", y),
-         m = paste0("M", month(date)," ", y)) %>% 
-  rename(company = Company)
+         q = paste0(y, quarter(date)),
+         m = paste0(y, month(date))) %>% 
+  rename(company = Company) %>% 
+  mutate(p_n = case_when(sentiment == 'positive' ~ 1,
+                   sentiment == 'negative' ~ 0,
+                   T ~ NA))
 
+
+rev_base <- rbind(bp, chevron, exxon, shell) %>% 
+  transmute(ratingValue, name, reviewBody, company = name1, date, i) %>%
+  mutate(date = as.Date(date, format = "%b %d, %Y")) %>%
+  drop_na() %>% 
+  arrange(company, date) %>% 
+  mutate(y = year(date),
+         q = paste0(y, quarter(date)),
+         m = paste0(y, month(date))) 
 
 ```
 
 ```{r}
-# now try and get a 3 month rolling average, attach 3 month rolling rating, use those two variables to predict 3 month rolling returns. 
-
 # Returns Data
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
@@ -142,8 +156,7 @@ rf <- tidyquant::tq_get("DGS10",
                            from = '2013-12-31',
                            to = Sys.Date()) %>% 
   transmute(date, rf = price/100) %>% 
-  mutate(rf = ((rf + 1)^(1/252)) - 1) %>% 
-  filter()
+  mutate(rf = ((rf + 1)^(1/252)) - 1) 
 
 
 ret_index <- index %>%
@@ -152,12 +165,15 @@ ret_index <- index %>%
   ungroup() %>% 
   transmute(date, sp500_close = adjusted, sp500_ret = returns)
 
+#join rf to main returns; missing a few corresonding rf's, hence fill
 ret_index <- full_join(rf, ret_index, by = 'date') %>%
   fill(rf, .direction = "down")
   
 ret_join <- full_join(ret, ret_index, by = 'date') %>% 
   drop_na()
 
+
+#div for roll reg
 shell_ret <- ret_join %>% 
   filter(symbol == "SHEL")
 
@@ -183,17 +199,21 @@ shell_ret <- rollReg(shell_ret, 252, 'sp500_ret', 'returns')
 ret_join_beta <- rbind(chev_ret, bp_ret, exon_ret, shell_ret)
 
 ret_join_beta <- ret_join_beta %>% 
+  #daily alpha
   mutate(alpha = returns - rf - slope*sp500_ret + slope*rf) %>% 
   drop_na() %>%
+  #y, q, m for summarising 
   mutate(y = year(date),
-         q = paste0("Q", quarter(date)," ", y),
-         m = paste0("M", month(date)," ", y))
+         q = paste0(y, quarter(date)),
+         m = paste0(y, month(date)))
 
 
 
 ```
 
 ```{r}
+
+#old analysis; intial roll test
 
 library(tidyverse)
 library(zoo)
@@ -227,20 +247,13 @@ review_comb <- full_join(rateRollAvg, bing_nlp, by = c('month', 'company'))
 review_comb <- full_join(review_comb, afinn_nlp, by = c('month', 'company'))
 
 
-
-
-
-
 ```
 
 ```{r}
-library(fintool)
-#github: vlahadamis/fintool
-
-
+#chunk from initial analysis
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
-adj_price <- fintool::ezohlc(tick, '2016-02-01', Sys.Date())
+adj_price <- fintool::ezohlc(tick, '2014-01-01', Sys.Date())
 
 retMon <- adj_price %>%
   mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
@@ -262,26 +275,16 @@ review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
 ```
 
 ```{r}
-#reviews as a predictor of alpha in y
-rev_y <- rbind(bp, chevron, exxon, shell) %>% 
-  transmute(ratingValue, name, reviewBody, company = name1, date, i) %>%
-  mutate(date = as.Date(date, format = "%b %d, %Y")) %>%
-  drop_na() %>% 
-  arrange(company, date) %>% 
-  mutate(y = year(date),
-         q = paste0("Q", quarter(date)," ", y),
-         m = paste0("M", month(date)," ", y)) %>% 
+#reviews as a predictor of alpha, leading 1 year (y)
+rev_y <- rev_base %>% 
   group_by(y, company) %>% 
-  summarise(mean_value = mean(ratingValue), count = n()) 
+  summarise(mean_rating = mean(ratingValue), count = n()) 
 
 affin_y <- affin_base %>% 
   group_by(company, y) %>% 
   summarise(sentiment = mean(value))
 
 bing_y <- bing_base %>% 
-  mutate(p_n = case_when(sentiment == 'positive' ~ 1,
-                   sentiment == 'negative' ~ 0,
-                   T ~ NA)) %>% 
   group_by(company, y) %>% 
   summarise(prop_postive = mean(p_n))
   
@@ -308,45 +311,89 @@ alpha_y <- alpha_y %>%
   mutate(returns = log(sp500_close/lag(sp500_close)),
          rf = ((rf + 1)^(252)) - 1) %>% 
   mutate(alpha = returns - rf - slope*sp500_ret + slope*rf) %>%
-  mutate(y = y + 1)
+  mutate(y = y - 1) %>% 
+  drop_na() %>% 
+  group_by(y) 
   
 
 comb_y <- full_join(alpha_y, indicators_y, by = c("company", "y")) %>% 
-  transmute(y, company, alpha, prop_postive, mean_value, sentiment) %>% 
+  transmute(y, date, company, alpha, prop_postive, mean_rating, sentiment) %>% 
   drop_na()
 
-
-model <- lm(alpha ~ prop_postive + mean_value + sentiment, data = comb_y)
+model <- lm(alpha ~ prop_postive + mean_rating + sentiment, data = comb_y)
 
 summary(model)
 
-tq_index("^GSPC", get = "stock.prices", from = "2020-01-01", to = "2024-01-01")
+#tq_index("^GSPC", get = "stock.prices", from = "2020-01-01", to = "2024-01-01")
 
-sp500_desc <- tidyquant::tq_index("SP500") 
+#sp500_desc <- tidyquant::tq_index("SP500") 
   #%>% dplyr::filter(!stringr::str_detect(symbol,"BRK.B|BF.B"))
 
-sp400_prices <- tidyquant::tq_get(sort(sp400_desc$symbol),
+#sp400_prices <- tidyquant::tq_get(sort(sp400_desc$symbol),
                                   #sort(grep(sp400_desc$symbol,pattern = "BRK.B|BF.B|DD", value = TRUE, invert = TRUE)),
-                                  get  = "stock.prices",
-                                  from = "2011-01-01",
-                                  to = Sys.Date())
+                             #     get  = "stock.prices",
+                             #     from = "2011-01-01",
+                               #   to = Sys.Date())
 
 ```
 
 ```{r}
 
-review_comb_bp <- review_comb %>% 
-  filter(company == 'bp')
+port_y <- adj_price %>% 
+  filter(date >= '2014-12-31',
+         date <= '2024-01-01') %>% 
+  mutate(company = case_when(Symbol == "BP" ~ "bp",
+                             Symbol == "CVX" ~ "Chevron",
+                             Symbol == "SHEL" ~ "Shell",
+                             Symbol == "XOM" ~ "ExxonMobil")) %>% 
+  mutate(y = year(date),
+         q = paste0(y, quarter(date)),
+         m = paste0(y, month(date))) %>% 
+  group_by(y) %>% 
+  filter(date == max(date)) %>% 
+  ungroup() %>% 
+  #subtract a year to bind correct lagged sentiment
+  mutate(y = y - 1)
 
-model <- lm(retMon ~ month + xOver + percent_positive + sentiment, data = r)
+rev_y <- rev_base %>% 
+  group_by(y, company) %>% 
+  summarise(mean_rating = mean(ratingValue), count = n()) 
 
-summary(model)
+affin_y <- affin_base %>% 
+  group_by(company, y) %>% 
+  summarise(sentiment = mean(value))
 
-review_comb_exxon <- review_comb %>% 
-  filter(company == 'ExxonMobil')
+bing_y <- bing_base %>% 
+  group_by(company, y) %>% 
+  summarise(prop_postive = mean(p_n))
+  
+indicators_y <- full_join(rev_y, affin_y, by = c("company", "y"))
+indicators_y <- full_join(bing_y, indicators_y, by = c("company", "y"))
 
-model <- lm(retMon ~ month + rollAvg3 + rollAvg12 + xOver + percent_positive + sentiment, data = review_comb_exxon)
+#joining prices at year end with sentiment
+port_y <- full_join(port_y, indicators_y, by = c("company", "y"))  %>% 
+  select(-count)
 
-summary(model)
+
+port_y_norm <- port_y %>% 
+  #normalizing indicators
+  mutate(mean_rating = mean_rating/5,
+         sentiment = sentiment/5) %>% 
+  transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment) %>% 
+  drop_na() %>% 
+  mutate(comb_sent = 2*prop_postive + 2*mean_rating + 2*sentiment) %>%
+  group_by(y) %>%
+  mutate(weight = comb_sent / sum(comb_sent)) %>% 
+  group_by(company) %>%
+  mutate(logRet = log(close/lag(close))) %>% 
+  drop_na()
+
+
+weighted_returns <- port_y_norm %>% 
+  mutate(w_logRet = weight*logRet) %>%
+  group_by(date) %>%
+  summarise(ret_port = sum(w_logRet)) %>% 
+  ungroup()
 
 ```
+
