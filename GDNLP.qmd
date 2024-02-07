@@ -384,16 +384,16 @@ port_y_norm <- port_y %>%
   mutate(comb_sent = 2*prop_postive + 2*mean_rating + 2*sentiment) %>%
   group_by(y) %>%
   mutate(weight = comb_sent / sum(comb_sent)) %>% 
-  group_by(company) %>%
-  mutate(logRet = log(close/lag(close))) %>% 
-  drop_na()
+  group_by(company)
 
-
+#close pirces dictate most of the weight in this simple ex. fyi
 weighted_returns <- port_y_norm %>% 
-  mutate(w_logRet = weight*logRet) %>%
+  mutate(w_close = weight*close) %>%
   group_by(date) %>%
-  summarise(ret_port = sum(w_logRet)) %>% 
-  ungroup()
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na()
 
 ```
 
