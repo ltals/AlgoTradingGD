@@ -1,16 +1,17 @@
 ---
 title: "NLPGD"
-format: html
+format:
+  html:
+    self-contained: true
 editor: visual
 ---
-
 ## Preface
 
 Employees are the heart and soul of a business. Their actions and performance are what drive the profitability of a business and it's ability to maximize shareholder value. In the following document, we look to address the following question:
 
 *Is there a relationship between employee sentiment and excess returns?*
 
-By building a webscraping program and applying it to GlassDoor, we were able to compile comprehensive list thousands of employee reviews across a variety of companies:
+By building a webscraping program and applying it to GlassDoor, we were able to compile thousands of employee reviews across a variety of companies:
 
 -   ExxonMobil (XOM)
 -   Chevron (CVX)
@@ -30,6 +31,7 @@ library(zoo)
 library(tidytext)
 library(textdata)
 library(fintool)
+library(plotly)
 #github: jvlahadamis/fintool
 
 bp <- read_csv("BP.csv") %>% 
@@ -62,6 +64,26 @@ ratings <- ratings %>%
 ```
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tick <- c('SHEL', 'XOM', 'BP', 'CVX')
+
+prices <- tidyquant::tq_get(tick,
+                            get = 'stock.prices',
+                            from = '2013-12-31',
+                            to = Sys.Date())
+
+price_plot <- prices %>% 
+  rename(Price = adjusted,
+         Ticker = symbol) %>% 
+  ggplot(aes(x = date, y = Price, col = Ticker)) + 
+  geom_line() +
+  labs(title = 'Companies included in Analysis', y = "Price", x = "") + 
+  theme_minimal()
+
+
+ggplotly(price_plot)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # start playing around with sentiment
 # afinn
 afinn <- tidytext::get_sentiments('afinn')
@@ -75,8 +97,8 @@ afinn_nlp <- ratings %>%
   group_by(month, Company) %>%
   summarise(sentiment = mean(value), .groups = 'keep') 
 
-afinn_nlp %>% 
-  ggplot(aes(x = month, y = sentiment, col = Company)) + geom_bar(stat = 'identity') + facet_wrap(~Company)
+#afinn_nlp %>% 
+#  ggplot(aes(x = month, y = sentiment, col = Company)) + geom_bar(stat = 'identity') + facet_wrap(~Company)
 
 #unsummarised base files used to compare models with different return windows
 affin_base <- ratings %>%
@@ -89,7 +111,6 @@ affin_base <- ratings %>%
   rename(company = Company)
 
 
-min(afinn$value)
 ```
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
@@ -138,14 +159,56 @@ rev_base <- rbind(bp, chevron, exxon, shell) %>%
 
 ```
 
+We wanted to select companies that all operate in the same industry and differ by market cap. This ensures that our analysis truly represents differentiating factors in relation to excess returns.
+
+Firstly, we needed to make sense of all the reviews and how best to compile and analyze them. Natural Language processing is the computational analysis of language and speech. This essentially analyzes words and phrases and rates them numerically or categorically based off of the emotion and message they are conveying. Here is a short description of the two methods we applied:
+
+-   Bing: A dataset of 6,786 words with binary positive and negative sentiment scores
+```{r}
+library(gt)
+p <- bing %>% slice_head(n = 3) 
+n <- bing %>% slice_tail(n = 3)
+b <- rbind(p, n)
+b %>% gt() %>% tab_options(
+  data_row.padding = px(6),
+  heading.align = 'left',
+  column_labels.background.color = 'dodgerblue4',
+  heading.title.font.size = 26,
+  footnotes.font.size = 8
+) %>% 
+  tab_style(style = cell_text(color = 'dodgerblue4',
+                              weight = 'bold'),
+            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 10, heading.title.font.size = 15)
+```
+-   Afinn: A dataset of 2477 words with scores ranging from -5 to 5:
+
+```{r}
+ap <- afinn %>% slice_head(n = 500)
+an <- afinn %>% slice_tail(n = 500)
+a <- rbind(ap,an) %>% arrange(desc(value)) %>% slice_head(n = 6)
+a %>% gt() %>% tab_options(
+  data_row.padding = px(6),
+  heading.align = 'left',
+  column_labels.background.color = 'dodgerblue4',
+  heading.title.font.size = 26,
+  footnotes.font.size = 8
+) %>% 
+  tab_style(style = cell_text(color = 'dodgerblue4',
+                              weight = 'bold'),
+            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 10, heading.title.font.size = 15)
+```
+
+We also utilized the star ratings that employees leave whenever a review is posted (ranging from 1 star to 5 stars). To organize our data into workable metrics. We used individual words instead of ngrams (collection of words or short sentences) as the bulk of the reviews are short and sometimes contain only one word. To summarize, we opted for the following:
+
+-   Grouped reviews into monthly, quarterly and annual bins.
+-   Bing was organized into percentage of reviews that were deemed positive and averaged over monthly, quarterly and annually.
+-   Afinn was organized into average total score over monthly, quarterly and annually.
+-   Star ratings were averaged over monthly, quarterly and annually.
+
+Here are some visuals that are separated by company, depicting how these various metrics change through time. All charts use monthly data to help tell the story:
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # Returns Data
-tick <- c('SHEL', 'XOM', 'BP', 'CVX')
-
-prices <- tidyquant::tq_get(tick,
-                            get = 'stock.prices',
-                            from = '2013-12-31',
-                            to = Sys.Date())
 ret <- prices %>%
   group_by(symbol) %>%
   mutate(returns = log(adjusted/lag(adjusted))) %>% 
@@ -278,6 +341,26 @@ retMon4bind <- retMon %>%
 
 review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
 ```
+We also utilized the star ratings that employees leave whenever a review is posted (ranging from 1 star to 5 stars). To organize our data into workable metrics. We used individual words instead of ngrams (collection of words or short sentences) as the bulk of the reviews are short and sometimes contain only one word. To summarize, we opted for the following:
+
+-   Grouped reviews into monthly, quarterly and annual bins.
+-   Bing was organized into percentage of reviews that were deemed positive and averaged over monthly, quarterly and annually.
+-   Afinn was organized into average total score over monthly, quarterly and annually.
+-   Star ratings were averaged over monthly, quarterly and annually.
+
+Here are some visuals that are separated by company, depicting how these various metrics change through time. All charts use monthly data to help tell the story:
+
+```{r}
+review_comb %>% plot_ly(x = ~month,
+                    y = ~meanRateMon,
+                    color = ~company,
+                    type = 'scatter',
+                    mode = 'lines') %>% layout(title = "Average Monthly Star Reviews",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Stars"))
+```
+
+
 # Alpha Analysis
 - Using CAPM, Alphas were calculated annually for each individual stock
   - 1 Year Beta
@@ -383,11 +466,7 @@ wide_alpha <- alpha_y %>%
   select(-date)
 
 
-stats::cor(wide_alpha, method = "pearson")
-  
-  , method = "number", type = "upper",tl.col="grey30", tl.srt=45, addCoef.col = 'grey30')
-
-corrplot::corrplot.mixed(stats::cor(wide_alpha, method = "pearson"), title = "Correlation Matrix", upper = "number", lower = "square", tl.pos = 'd', tl.col="black", tl.srt=45, addCoef.col = 'grey20', mar=c(0,0,2,0))
+#corrplot::corrplot.mixed(stats::cor(wide_alpha, method = "pearson"), title = "Correlation Matrix", upper = "number", lower = "square", tl.pos = 'd', tl.col="black", tl.srt=45, addCoef.col = 'grey20', mar=c(0,0,2,0))
 
 
 #uso <- tq_get("USO", from = "2014-01-01", to = "2023-12-31") %>%
@@ -705,6 +784,9 @@ ggplotly(portVal_plot)
   
 ```
 #```{r}
+
+
+# Ignore below for the time being
 
 port_y <- adj_price %>% 
   filter(date >= '2013-12-31',
