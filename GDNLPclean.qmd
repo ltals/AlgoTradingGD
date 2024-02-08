@@ -4,15 +4,22 @@ format: html
 editor: visual
 ---
 
-## Quarto
+## Preface
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+Employees are the heart and soul of a business. Their actions and performance are what drive the profitability of a business and it's ability to maximize shareholder value. In the following document, we look to address the following question:
 
-## Running Code
+*Is there a relationship between employee sentiment and excess returns?*
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+By building a webscraping program and applying it to GlassDoor, we were able to compile comprehensive list thousands of employee reviews across a variety of companies:
 
-```{r}
+-   ExxonMobil (XOM)
+-   Chevron (CVX)
+-   Shell (SHEL)
+-   BP (BP)
+
+For context on the analysis that occurs below, here is a chart that represents their respective share prices from the last 10 years:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(ggplot2)
 library(tidyquant)
@@ -54,7 +61,7 @@ ratings <- ratings %>%
           transmute(Company, name, Rating, reviewtext, date)
 ```
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # start playing around with sentiment
 # afinn
 afinn <- tidytext::get_sentiments('afinn')
@@ -85,7 +92,7 @@ affin_base <- ratings %>%
 min(afinn$value)
 ```
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # create sentiment analysis for 3 month rolling average
 bing <- tidytext::get_sentiments('bing')
 
@@ -131,7 +138,7 @@ rev_base <- rbind(bp, chevron, exxon, shell) %>%
 
 ```
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # Returns Data
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
@@ -207,11 +214,9 @@ ret_join_beta <- ret_join_beta %>%
          q = paste0(y, quarter(date)),
          m = paste0(y, month(date)))
 
-
-
 ```
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 #old analysis; intial roll test
 
@@ -249,11 +254,11 @@ review_comb <- full_join(review_comb, afinn_nlp, by = c('month', 'company'))
 
 ```
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #chunk from initial analysis
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
 
-adj_price <- fintool::ezohlc(tick, '2014-01-01', Sys.Date())
+adj_price <- fintool::ezohlc(tick, '2013-01-01', Sys.Date())
 
 retMon <- adj_price %>%
   mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
@@ -273,8 +278,21 @@ retMon4bind <- retMon %>%
 
 review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
 ```
+# Alpha Analysis
+- Using CAPM, Alphas were calculated annually for each individual stock
+  - 1 Year Beta
+  - S&P500 utilized as a proxy for market return
+  
+- Annual Alphas were regressed annually against the preceding year's average review ratings and sentiment, as defined by the Affin dictionary.
+  - Bing NLP excluded due to model multicollinearity
 
-```{r}
+- Model fit was poor for all four companies
+
+- Alpha between the four firms w
+  
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #reviews as a predictor of alpha, leading 1 year (y)
 rev_y <- rev_base %>% 
   group_by(y, company) %>% 
@@ -320,15 +338,97 @@ comb_y <- full_join(alpha_y, indicators_y, by = c("company", "y")) %>%
   transmute(y, date, company, alpha, prop_postive, mean_rating, sentiment) %>% 
   drop_na()
 
-model <- lm(alpha ~ prop_postive + mean_rating + sentiment, data = comb_y)
+library(car)
 
-summary(model)
+comb_chev <- comb_y %>% 
+  filter(company == "Chevron")
+
+model_chev <- lm(alpha ~ prop_postive + mean_rating + sentiment, data = comb_y)
+
+vif(model_chev)
+
+summary(model_chev)
+
+comb_bp <- comb_y %>% 
+  filter(company == "bp")
+
+model_bp <- lm(alpha ~ mean_rating + sentiment, data = comb_bp)
+
+summary(model_bp)
+
+vif(model_bp)
+
+comb_exxon <- comb_y %>% 
+  filter(company == "ExxonMobil")
+
+model_exxon <- lm(alpha ~ mean_rating + sentiment, data = comb_exxon)
+
+vif(model_exxon)
+
+summary(model_exxon)
+
+comb_shell <- comb_y %>% 
+  filter(company == "Shell")
+
+model_shell <- lm(alpha ~ mean_rating + sentiment, data = comb_shell)
+
+summary(model_shell)
+
+vif(model_shell)
+
+wide_alpha <- alpha_y %>%
+  ungroup() %>% 
+  transmute(company, date, alpha) %>%  
+  pivot_wider(names_from = company, values_from = alpha)  %>% 
+  select(-date)
 
 
+stats::cor(wide_alpha, method = "pearson")
+  
+  , method = "number", type = "upper",tl.col="grey30", tl.srt=45, addCoef.col = 'grey30')
 
+corrplot::corrplot.mixed(stats::cor(wide_alpha, method = "pearson"), title = "Correlation Matrix", upper = "number", lower = "square", tl.pos = 'd', tl.col="black", tl.srt=45, addCoef.col = 'grey20', mar=c(0,0,2,0))
+
+
+#uso <- tq_get("USO", from = "2014-01-01", to = "2023-12-31") %>%
+#  mutate(y = year(date)) %>% 
+#  group_by(y) %>% 
+#  filter(date == max(date)) %>% 
+#  ungroup()  %>% 
+#mutate(logRet = log(adjusted/lag(adjusted))) %>% 
+#  drop_na()
+
+
+#test <- full_join(alpha_y, uso, by = "date") 
+
+#test %>% 
+#  ggplot(aes(x = date, y = alpha, col = company)) + geom_line() +
+ # geom_line(y = $logRet)
+
+
+#model_uso <- lm(alpha ~ adjusted, data = test)
+
+#summary(model_uso)
 ```
 
-```{r}
+# Portfolio-based Analysis
+#### Two portfolios of our selected companies were created
+
+- Portflio 1: Naive equally-weighted portfolio
+  - Rebalanced yearly based upon the prior years closing price
+
+- Portfolio 2: Optimized portfolio utilizing three sentiment indicators
+  - Generated weights utilizing a combination the input indicators
+  - Optimization process to determine the ideal relative sentiment mix
+    - Training window: 2014-2021
+  - Rebalanced annually using an aggregation sentiment data from the prior year
+    - Sentiment is treated on a absolute basis as opposed to on a relative basis to prior years
+    - Companies are proportional de-weighted in cases of 'review slippage' relative to their peers
+      - No additionally compounds are included for +/- review drift 
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 port_y <- adj_price %>% 
   filter(date >= '2013-12-31',
@@ -370,12 +470,17 @@ port_y <- full_join(port_y, indicators_y, by = c("company", "y"))  %>%
 
 ```
 
-```{r}
-trade_func <- function(data = port_y, prop = 2, rate = 2, sent = 2) {
-  port_y_norm <- port_y %>% 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+port_y_train <- port_y %>% 
+  filter(date < '2020-12-31')
+
+trade_func <- function(data, prop, rate, sent) {
+  port_y_norm <- data %>% 
   #normalizing indicators
-  mutate(mean_rating = mean_rating/5,
-         sentiment = sentiment/5) %>% 
+  mutate(mean_rating = mean_rating,
+         sentiment = sentiment) %>% 
   transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment, lag_close) %>% 
   drop_na() %>% 
   mutate(comb_sent = prop*prop_postive + rate*mean_rating + sent*sentiment,
@@ -415,7 +520,7 @@ trade_func <- function(data = port_y, prop = 2, rate = 2, sent = 2) {
   }
 
 
-trade_func(port_y, 2, 2, 2)
+trade_func(port_y, 0, 1, 0)
 
 out <- expand.grid(
   prop = seq(from = 0, to = 1, by = .02),
@@ -444,7 +549,7 @@ res <- foreach(
   sent <- combo$sent
   
  
-  trade_func(data = port_y, prop = prop, rate = rate, sent = sent)
+  trade_func(data = port_y_train, prop = prop, rate = rate, sent = sent)
 }
 
 
@@ -490,4 +595,337 @@ rebal_func <- function(data) {
 
 rebal_func(port_y)
 
+
+port_y_norm <- port_y %>% 
+  #normalizing indicators
+  mutate(mean_rating = mean_rating/5,
+         sentiment = sentiment/5) %>% 
+  transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment, lag_close) %>% 
+  drop_na() %>% 
+  mutate(comb_sent = 0*prop_postive + 0*mean_rating + 1*sentiment,
+         price_norm = 1 / lag_close) %>% 
+  group_by(y) %>% 
+  #weighted sentiment
+  mutate(weight_sent = comb_sent / sum(comb_sent)) %>%
+  #adj for close prices in the prior year
+  mutate(weight = weight_sent*price_norm/sum(price_norm*weight_sent)) %>%
+  arrange(company, date) %>%
+  group_by(company) %>% 
+  mutate(previous_weight = lag(weight), # previous weight
+         trades = case_when(
+           date == '2014-12-31' ~ 1, # Starting strategy
+           is.na(previous_weight) ~ NA_real_, # Handle the first row 
+           weight < previous_weight ~ -1, # Selling
+           weight > previous_weight ~ 1, # Buying
+           TRUE ~ 0 # No change
+         )) %>%
+  ungroup() %>% 
+  mutate(position = 4)
+
+  
+weighted_returns <- port_y_norm %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() %>% 
+  summarise(logRet_sum = sum(logRet),
+            var = var(logRet)) %>% 
+  mutate(prop = 0, 
+         rate = 0,
+         sent = 1)
+  
+
+  
+port_rebal <- port_y %>% 
+  transmute(date, company, close = Close, y, lag_close) %>% 
+  drop_na() %>% 
+  mutate(price_norm = 1 / lag_close) %>% 
+  group_by(y) %>%
+  #adj for close prices in the prior year
+  mutate(weight = price_norm/sum(price_norm)) %>%
+  arrange(company, date) %>%
+  group_by(company) %>% 
+  mutate(previous_weight = lag(weight), # previous weight
+         trades = case_when(
+           date == '2015-12-31' ~ 1, # Starting strategy
+           is.na(previous_weight) ~ NA_real_, # Handle the first row 
+           weight < previous_weight ~ -1, # Selling
+           weight > previous_weight ~ 1, # Buying
+           TRUE ~ 0 # No change
+         )) %>%
+  ungroup() %>% 
+  mutate(position = 4)
+  
+  weighted_returns <- port_rebal %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() %>% 
+  summarise(logRet_sum = sum(logRet),
+            var = var(logRet)) 
+    
+  
+  weighted_close <- port_y_norm %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value)))
+  
+  
+  weighted_close_rebal <- port_rebal %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value)))%>%
+  group_by(date) %>% 
+  summarise(port_value = sum(port_value))
+  
+portVal_plot <- weighted_close %>% 
+  mutate(Year = year(date)) %>%
+  group_by(Year) %>% 
+  summarise(Sentiment = sum(port_value)) %>% 
+  mutate(`Naive` = weighted_close_rebal$port_value) %>% 
+  pivot_longer(-Year, names_to = "Portfolio", values_to = "Value") %>% 
+  ggplot(aes(y = Value, x = Year, col = Portfolio)) + geom_line() +
+  labs(x = "", y = "Porfolio Value", title = "Portfolio Comparison (Test & Train)", subtitle = "Training Window: 2014 - 2020") + theme_minimal()
+                    
+library(plotly)                       
+ggplotly(portVal_plot)                              
+   
+   
+   
+  
+  
+  
 ```
+#```{r}
+
+port_y <- adj_price %>% 
+  filter(date >= '2013-12-31',
+         date <= '2024-01-01') %>% 
+  mutate(company = case_when(Symbol == "BP" ~ "bp",
+                             Symbol == "CVX" ~ "Chevron",
+                             Symbol == "SHEL" ~ "Shell",
+                             Symbol == "XOM" ~ "ExxonMobil")) %>% 
+  mutate(year = year(date),
+         y = as.numeric(paste0(year, quarter(date))),
+         m = paste0(year, month(date))) %>% 
+  group_by(y) %>% 
+  filter(date == max(date)) %>% 
+  ungroup() %>% 
+  #subtract a year to bind correct lagged sentiment
+  mutate(y = y - 1) %>% 
+  group_by(company) %>% 
+  mutate(lag_close = lag(Close)) %>% 
+  drop_na()
+
+rev_y <- rev_base %>% 
+  group_by(q, company) %>% 
+  select(-y) %>% 
+  rename(y = q) %>%
+  mutate(y = as.numeric(y)) %>% 
+  summarise(mean_rating = mean(ratingValue), count = n()) 
+
+affin_y <- affin_base %>% 
+  group_by(company, q) %>% 
+  select(-y) %>% 
+  rename(y = q) %>%
+  mutate(y = as.numeric(y)) %>% 
+  summarise(sentiment = mean(value))
+
+bing_y <- bing_base %>% 
+  group_by(company, q) %>%
+  select(-y) %>% 
+  rename(y = q) %>%
+  mutate(y = as.numeric(y)) %>% 
+  summarise(prop_postive = mean(p_n))
+  
+indicators_y <- full_join(rev_y, affin_y, by = c("company", "y"))
+indicators_y <- full_join(bing_y, indicators_y, by = c("company", "y"))
+
+#joining prices at year end with sentiment
+port_y <- full_join(port_y, indicators_y, by = c("company", "y"))  %>% 
+  select(-count)
+
+
+
+
+port_y_train <- port_y %>% 
+  filter(date < '2022-12-31')
+
+trade_func <- function(data, prop, rate, sent) {
+  port_y_norm <- data %>% 
+  #normalizing indicators
+  mutate(mean_rating = mean_rating/5,
+         sentiment = sentiment/5) %>% 
+  transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment, lag_close) %>% 
+  drop_na() %>% 
+  mutate(comb_sent = prop*prop_postive + rate*mean_rating + sent*sentiment,
+         price_norm = 1 / lag_close) %>% 
+  group_by(y) %>% 
+  #weighted sentiment
+  mutate(weight_sent = comb_sent / sum(comb_sent)) %>%
+  #adj for close prices in the prior year
+  mutate(weight = weight_sent*price_norm/sum(price_norm*weight_sent)) %>%
+  arrange(company, date) %>%
+  group_by(company) %>% 
+  mutate(previous_weight = lag(weight), # previous weight
+         trades = case_when(
+           date == '2015-12-31' ~ 1, # Starting strategy
+           is.na(previous_weight) ~ NA_real_, # Handle the first row 
+           weight < previous_weight ~ -1, # Selling
+           weight > previous_weight ~ 1, # Buying
+           TRUE ~ 0 # No change
+         )) %>%
+  ungroup() %>% 
+  mutate(position = 4)
+  
+  weighted_returns <- port_y_norm %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() %>% 
+  summarise(logRet_sum = sum(logRet),
+            var = var(logRet)) %>% 
+  mutate(prop = prop, 
+         rate = rate,
+         sent = sent)
+  
+    return(weighted_returns) 
+  }
+
+
+trade_func(port_y, 0, 1, 0)
+
+out <- expand.grid(
+  prop = seq(from = 0, to = 1, by = .02),
+  rate = seq(from = 0, to = 1, by = .02),
+  sent = seq(from = 0, to = 1, by = .02)) %>% 
+  mutate(total = prop + rate + sent) %>% 
+  filter(total == 1)
+  
+
+library(foreach)
+library(doParallel)
+
+n_cores <- detectCores() - 1
+
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+res <- foreach(
+  combo = iter(out, by = 'row'), 
+  .combine = rbind,
+  .packages = c("dplyr", "tidyverse", "tidyquant", "PerformanceAnalytics") 
+) %dopar% {
+
+  prop <- combo$prop
+  rate <- combo$rate
+  sent <- combo$sent
+  
+ 
+  trade_func(data = port_y_train, prop = prop, rate = rate, sent = sent)
+}
+
+
+stopCluster(cl)
+
+
+
+
+rebal_func <- function(data) {
+  port_y_norm <- data %>% 
+  transmute(date, company, close = Close, y, lag_close) %>% 
+  drop_na() %>% 
+  mutate(price_norm = 1 / lag_close) %>% 
+  group_by(y) %>%
+  #adj for close prices in the prior year
+  mutate(weight = price_norm/sum(price_norm)) %>%
+  arrange(company, date) %>%
+  group_by(company) %>% 
+  mutate(previous_weight = lag(weight), # previous weight
+         trades = case_when(
+           date == '2015-12-31' ~ 1, # Starting strategy
+           is.na(previous_weight) ~ NA_real_, # Handle the first row 
+           weight < previous_weight ~ -1, # Selling
+           weight > previous_weight ~ 1, # Buying
+           TRUE ~ 0 # No change
+         )) %>%
+  ungroup() %>% 
+  mutate(position = 4)
+  
+  weighted_returns <- port_y_norm %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() %>% 
+  summarise(logRet_sum = sum(logRet),
+            var = var(logRet)) 
+  
+    return(weighted_returns) 
+  }
+
+
+rebal_func(port_y)
+
+
+  port_y_norm <- port_y %>% 
+  #normalizing indicators
+  mutate(mean_rating = mean_rating/5,
+         sentiment = sentiment/5) %>% 
+  transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment, lag_close) %>% 
+  drop_na() %>% 
+  mutate(comb_sent = 0*prop_postive + 1*mean_rating + 0*sentiment,
+         price_norm = 1 / lag_close) %>% 
+  group_by(y) %>% 
+  #weighted sentiment
+  mutate(weight_sent = comb_sent / sum(comb_sent)) %>%
+  #adj for close prices in the prior year
+  mutate(weight = weight_sent*price_norm/sum(price_norm*weight_sent)) %>%
+  arrange(company, date) %>%
+  group_by(company) %>% 
+  mutate(previous_weight = lag(weight), # previous weight
+         trades = case_when(
+           date == '2014-12-31' ~ 1, # Starting strategy
+           is.na(previous_weight) ~ NA_real_, # Handle the first row 
+           weight < previous_weight ~ -1, # Selling
+           weight > previous_weight ~ 1, # Buying
+           TRUE ~ 0 # No change
+         )) %>%
+  ungroup() %>% 
+  mutate(position = 4)
+
+  
+  weighted_returns <- port_y_norm %>% 
+  mutate(w_close = weight*close) %>%
+  group_by(date) %>%
+  summarise(port_value = sum(w_close)) %>% 
+  ungroup() %>% 
+  mutate(logRet = log(port_value/lag(port_value))) %>% 
+  drop_na() %>% 
+  summarise(logRet_sum = sum(logRet),
+            var = var(logRet)) %>% 
+  mutate(prop = 0, 
+         rate = 0,
+         sent = 1)
+  
+  weighted_close <- port_y_norm %>% 
+    mutate(w_close = weight*close)
+  
+   weighted_close %>% 
+     mutate(Year = year(date)) %>%
+     ggplot(aes(y = port_value, x = y, col = company)) + geom_line()
+  
+
+```
+
