@@ -5,6 +5,7 @@ format:
     self-contained: true
 editor: visual
 ---
+
 ## Preface
 
 Employees are the heart and soul of a business. Their actions and performance are what drive the profitability of a business and it's ability to maximize shareholder value. In the following document, we look to address the following question:
@@ -205,9 +206,27 @@ rev_base <- rbind(bp, chevron, exxon, shell) %>%
 
 We wanted to select companies that all operate in the same industry and differ by market cap. This ensures that our analysis truly represents differentiating factors in relation to excess returns.
 
-Firstly, we needed to make sense of all the reviews and how best to compile and analyze them. Natural Language processing is the computational analysis of language and speech. This essentially analyzes words and phrases and rates them numerically or categorically based off of the emotion and message they are conveying. Here is a short description of the two methods we applied:
+Here is a chart showing how the review count changes through time, on a monthly basis. This is an important metric in how we selected our time frame for our analysis.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ratings %>%  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
+  group_by(month, Company) %>% summarise(reviews = n()) %>% drop_na() %>% ggplot(aes(x = month, y = reviews, fill = Company)) +
+  geom_col(show.legend = FALSE) + 
+  facet_wrap(~Company, scales = "free_y", ncol = 1) +
+  theme_minimal() + 
+  labs(x = "", y = "Count of Reviews", title = "Count of Reviews per Company per Month") +
+  scale_fill_brewer(palette = "Set1") 
+ 
+```
+Note the small number of reviews during GlassDoors early years. For this reason, we filtered the data to be post 2013. 
 
--   Bing: A dataset of 6,786 words with binary positive and negative sentiment scores
+Firstly, we needed to make sense of all the reviews and how best to compile and analyze them. 
+
+#### **NLP**
+
+Natural Language processing is the computational analysis of language and speech. This essentially analyzes words and phrases and rates them numerically or categorically based off of the emotion and message they are conveying. Here is a short description of the two methods we applied:
+
+-   **Bing**: A dataset of 6,786 words with binary positive and negative sentiment scores
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 library(gt)
 p <- bing %>% slice_head(n = 3) 
@@ -222,9 +241,10 @@ b %>% gt() %>% tab_options(
 ) %>% 
   tab_style(style = cell_text(color = 'dodgerblue4',
                               weight = 'bold'),
-            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 10, heading.title.font.size = 15)
+            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 20, heading.title.font.size = 30)
 ```
--   Afinn: A dataset of 2477 words with scores ranging from -5 to 5:
+
+-   **Afinn**: A dataset of 2477 words with scores ranging from -5 to 5:
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 ap <- afinn %>% slice_head(n = 500)
@@ -239,7 +259,7 @@ a %>% gt() %>% tab_options(
 ) %>% 
   tab_style(style = cell_text(color = 'dodgerblue4',
                               weight = 'bold'),
-            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 10, heading.title.font.size = 15)
+            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 20, heading.title.font.size = 30)
 ```
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
@@ -352,6 +372,53 @@ review_comb <- full_join(review_comb, afinn_nlp, by = c('month', 'company'))
 
 ```
 
+
+Just for fun, here is a wordcloud of different phrases:
+
+```{r, fig.height = 8, fig.width = 10, echo=FALSE, message=FALSE, warning=FALSE}
+library(wordcloud2)
+ratings %>% 
+  select(date, Company, reviewtext) %>%
+  filter(date > "2013-12-31") %>% 
+  unnest_tokens(output = word, input = reviewtext, token = 'ngrams', n = 4) %>% count(word, sort = T) %>% 
+  drop_na() %>% wordcloud2()
+```
+
+
+Overwhelmingly positive. Need to think about the people leaving negative reviews after lashing out emotionally, then going back and deleting them out of guilt (or to save face as a lot of reviews contain their roles).
+
+
+
+Even more fun, lets look at the negative ones: 
+![image](C:/Users\conno\OneDrive\Desktop\Winter 24\FAT\cloud2.png)
+
+This is just the high frequency occurances. If you scroll through a table of the lowest rated sentiment words, it gets quite entertaining: 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ratings %>%
+  select(date, Company, reviewtext) %>%
+  unnest_tokens(output = word, input = reviewtext) %>%
+  inner_join(afinn) %>%
+  filter(value <= -3) %>%
+  distinct(word, .keep_all = TRUE) %>%  gt() %>% tab_options(
+  data_row.padding = px(6),
+  heading.align = 'left',
+  column_labels.background.color = 'dodgerblue4',
+  heading.title.font.size = 26,
+  footnotes.font.size = 8
+) %>% 
+  tab_style(style = cell_text(color = 'dodgerblue4',
+                              weight = 'bold'),
+            locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 20, heading.title.font.size = 30) 
+
+```
+
+
+
+
+
+
+
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #chunk from initial analysis
 tick <- c('SHEL', 'XOM', 'BP', 'CVX')
@@ -376,12 +443,13 @@ retMon4bind <- retMon %>%
 
 review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
 ```
+
 We also utilized the star ratings that employees leave whenever a review is posted (ranging from 1 star to 5 stars). To organize our data into workable metrics. We used individual words instead of ngrams (collection of words or short sentences) as the bulk of the reviews are short and sometimes contain only one word. To summarize, we opted for the following:
 
 -   Grouped reviews into monthly, quarterly and annual bins.
--   Bing was organized into percentage of reviews that were deemed positive and averaged over monthly, quarterly and annually.
--   Afinn was organized into average total score over monthly, quarterly and annually.
--   Star ratings were averaged over monthly, quarterly and annually.
+-   Bing was organized into percentage of reviews that were deemed positive and averaged over monthly, quarterly and annual periods.
+-   Afinn was organized into average total score over monthly, quarterly and annual periods.
+-   Star ratings were averaged over monthly, quarterly and annual periods.
 
 Here are some visuals that are separated by company, depicting how these various metrics change through time. All charts use monthly data to help tell the story:
 
@@ -411,15 +479,6 @@ review_comb %>% filter(month >'2013-12-31') %>%
 ```
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-ratings %>%
-  select(date, Company, reviewtext) %>%
-  filter(date > "2013-12-31") %>% 
-  unnest_tokens(output = word, input = reviewtext) %>%  inner_join(afinn) %>% filter(Company == 'bp') %>% 
-  filter(date > '2018-01-01' & date < '2018-01-31')
-```
-
-
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
 bing_nlp$month <- as.Date(bing_nlp$month)
 
 ggplot(data = bing_nlp, aes(x = month)) +
@@ -433,23 +492,29 @@ ggplot(data = bing_nlp, aes(x = month)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
   labs(fill = "Review Sentiment", color = "Company",
        x = "", y = "Review Sentiment / Percent Positive")
-
 ```
 
 
 
+
+
+
+
 # Alpha Analysis
-- Using CAPM, Alphas were calculated annually for each individual stock
-  - 1 Year Beta
-  - S&P500 utilized as a proxy for market return
-  
-- Annual Alphas were regressed annually against the preceding year's average review ratings and sentiment, as defined by the Affin dictionary.
-  - Bing NLP excluded due to model multicollinearity
 
-- Model fit was poor for all four companies
+-   Using CAPM, Alphas were calculated annually for each individual stock
 
-- Alpha between the four firms w
-  
+    -   1 Year Beta
+    -   S&P500 utilized as a proxy for market return
+
+-   Annual Alphas were regressed annually against the preceding year's average review ratings and sentiment, as defined by the Affin dictionary.
+
+    -   Bing NLP excluded due to model multicollinearity
+
+-   Model fit was poor for all four companies
+
+-   Alpha between the four firms w
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 library(patchwork)
@@ -509,7 +574,6 @@ yearly_alpha_plot <- alpha_y %>%
 daily_alpha_plot/yearly_alpha_plot 
 
 ```
-
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -632,21 +696,19 @@ tbl_merge(
 ```
 
 # Portfolio-based Analysis
+
 #### Two portfolios of our selected companies were created
 
-- Portflio 1: Naive equally-weighted portfolio
-  - Rebalanced yearly based upon the prior years closing price
-
-- Portfolio 2: Optimized portfolio utilizing three sentiment indicators
-  - Generated weights utilizing a combination the input indicators
-  - Optimization process to determine the ideal relative sentiment mix
-    - Training window: 2014-2021
-  - Rebalanced annually using an aggregation sentiment data from the prior year
-    - Sentiment is treated on a absolute basis as opposed to on a relative basis to prior years
-    - Companies are proportional de-weighted in cases of 'review slippage' relative to their peers
-      - No additionally compounds are included for +/- review drift 
-
-
+-   Portflio 1: Naive equally-weighted portfolio
+    -   Rebalanced yearly based upon the prior years closing price
+-   Portfolio 2: Optimized portfolio utilizing three sentiment indicators
+    -   Generated weights utilizing a combination the input indicators
+    -   Optimization process to determine the ideal relative sentiment mix
+        -   Training window: 2014-2021
+    -   Rebalanced annually using an aggregation sentiment data from the prior year
+        -   Sentiment is treated on a absolute basis as opposed to on a relative basis to prior years
+        -   Companies are proportional de-weighted in cases of 'review slippage' relative to their peers
+            -   No additionally compounds are included for +/- review drift
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -943,5 +1005,11 @@ ggplotly(portVal_plot)
    
   
 ```
+### Review/Next Steps 
+The way in which we have captured sentiment and bound our review data to return data (i.e by year) has very little utility in terms of creating some sort of predicative model. It is clear that external firm specific factors have a much larger impact, such as commodity prices (although this is unsurprising). Still, we beilieve that high frequency GlassDoor reviews when combined with NLP have the potential to capture employee sentiment to proxy against excess returns. 
 
-
+* Dynamics of sentiment trend corresponds with the economic environment, seemingly do contain trends in periods of large market swings and contain components that point to the fact that they are more than white noise. 
+* Further analysis would include a much broader subset of companies ideally with a higher number of reviews. 
+* We were constrained by the run time of our webscraping program. 
+* We would like to explore with different sectors (maybe there is a bigger impact in tech?).
+* Explore various machine learning techniques to see if there is model improvement. 

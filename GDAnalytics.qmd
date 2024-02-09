@@ -43,22 +43,16 @@ ratings <- ratings %>%
 
 
 ```
+
 ```{r}
 # visuals
-ratings <- ratings %>% drop_na() %>% group_by(Company) %>% 
-  arrange(date) %>%
-  mutate(
-    Rating = as.numeric(Rating),  # Convert 'Rating' to numeric
-    rolling_avg = zoo::rollmeanr(Rating, k = 120, fill = NA, align = "right", na.rm = TRUE))
   
-ratings %>% filter(date > '2020-01-01') %>% plot_ly(x = ~date,
-                    y = ~rolling_avg,
-                    color = ~Company,
+review_comb %>% plot_ly(x = ~date,
+                    y = ~meanRateMon,
+                    color = ~company,
                     type = 'scatter',
                     mode = 'lines')
 ```
-
-
 
 ```{r}
 # Returns Data
@@ -91,4 +85,3 @@ theme(legend.position = "none") + ggtitle("Ratings That Contain The Word 'money'
   
 
 ```
-
