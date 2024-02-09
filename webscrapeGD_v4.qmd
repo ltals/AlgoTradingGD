@@ -61,7 +61,7 @@ rD <- rsDriver(browser = "firefox", chromever = NULL , verbose = FALSE)
   for (page_number in 1:num_pages) {
     full_url <- paste0(cleaned_url,"_P", page_number, ".htm?filter.iso3Language=eng")
     remDr$navigate(full_url)
-    Sys.sleep(runif(1, min = 5, max = 8)) 
+    Sys.sleep(runif(1, min = 5, max = 15)) 
     page_source <- remDr$getPageSource()
     reviews <- ExtractGDPage(page_source[[1]])
     all_reviews <- rbind(all_reviews, reviews)
