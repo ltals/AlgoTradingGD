@@ -1,5 +1,5 @@
 ---
-title: "NLPGD"
+title: "Employee Sentiment (GlassDoor) & Returns in the Oil Sector"
 format:
   html:
     self-contained: true
@@ -207,6 +207,7 @@ rev_base <- rbind(bp, chevron, exxon, shell) %>%
 We wanted to select companies that all operate in the same industry and differ by market cap. This ensures that our analysis truly represents differentiating factors in relation to excess returns.
 
 Here is a chart showing how the review count changes through time, on a monthly basis. This is an important metric in how we selected our time frame for our analysis.
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 ratings %>%  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>% 
   group_by(month, Company) %>% summarise(reviews = n()) %>% drop_na() %>% ggplot(aes(x = month, y = reviews, fill = Company)) +
@@ -217,9 +218,10 @@ ratings %>%  mutate(month = (ceiling_date(date, unit = 'month') - days(1))) %>%
   scale_fill_brewer(palette = "Set1") 
  
 ```
-Note the small number of reviews during GlassDoors early years. For this reason, we filtered the data to be post 2013. 
 
-Firstly, we needed to make sense of all the reviews and how best to compile and analyze them. 
+Note the small number of reviews during GlassDoors early years. For this reason, we filtered the data to be post 2013.
+
+Firstly, we needed to make sense of all the reviews and how best to compile and analyze them.
 
 #### **NLP**
 
@@ -372,7 +374,6 @@ review_comb <- full_join(review_comb, afinn_nlp, by = c('month', 'company'))
 
 ```
 
-
 Just for fun, here is a wordcloud of different phrases:
 
 ```{r, fig.height = 8, fig.width = 10, echo=FALSE, message=FALSE, warning=FALSE}
@@ -384,15 +385,12 @@ ratings %>%
   drop_na() %>% wordcloud2()
 ```
 
-
 Overwhelmingly positive. Need to think about the people leaving negative reviews after lashing out emotionally, then going back and deleting them out of guilt (or to save face as a lot of reviews contain their roles).
 
+Even more fun, lets look at the negative ones: ![image](C:/Users\conno\OneDrive\Desktop\Winter%2024\FAT\cloud2.png)
 
+This is just the high frequency occurances. If you scroll through a table of the lowest rated sentiment words, it gets quite entertaining:
 
-Even more fun, lets look at the negative ones: 
-![image](C:/Users\conno\OneDrive\Desktop\Winter 24\FAT\cloud2.png)
-
-This is just the high frequency occurances. If you scroll through a table of the lowest rated sentiment words, it gets quite entertaining: 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 ratings %>%
   select(date, Company, reviewtext) %>%
@@ -411,13 +409,6 @@ ratings %>%
             locations = cells_title(groups = 'title')) %>% tab_options(table.font.size = 20, heading.title.font.size = 30) 
 
 ```
-
-
-
-
-
-
-
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #chunk from initial analysis
@@ -493,12 +484,6 @@ ggplot(data = bing_nlp, aes(x = month)) +
   labs(fill = "Review Sentiment", color = "Company",
        x = "", y = "Review Sentiment / Percent Positive")
 ```
-
-
-
-
-
-
 
 # Alpha Analysis
 
@@ -579,7 +564,13 @@ daily_alpha_plot/yearly_alpha_plot
 
 ### Findings
 
-Our sentiment proxy had no explanatory power when attempting to predict alpha returns in the proceeding year - Model fit was poor for all four companies - No model or factor significance was found - Counter-intuitive beta directionality
+Our sentiment proxy had no explanatory power when attempting to predict alpha returns in the proceeding year
+
+-   Model fit was poor for all four companies
+
+-   No model or factor significance was found
+
+-   Counter-intuitive beta directionality
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -713,7 +704,7 @@ Two portfolios of our selected companies were created:
 -   Portflio 1: Naive equally-weighted portfolio
     -   Rebalanced yearly based upon the prior years closing price
 -   Portfolio 2: Optimized portfolio utilizing three sentiment indicators
-    -   Generated weights utilizing a combination the input indicators
+    -   Generated weights to utilize a combination the input indicators to create a single sentiment measure
     -   Optimization process to determine the ideal relative sentiment mix
         -   Training window: 2014-2021
     -   Rebalanced annually using an aggregation sentiment data from the prior year
@@ -893,14 +884,15 @@ rebal_func <- function(data) {
 
 
 sentiment = unique(res$sent)
-rate = unique(out$rate)
+rate = unique(res$rate)
 LogReturn <-
   res %>% dplyr::select(sent, rate, logRet_sum) %>%
   tidyr::pivot_wider(values_from = logRet_sum, names_from = rate) %>%
   dplyr::select(-1) %>% as.matrix()
 plot_ly(x = ~ sentiment,
         y = ~ rate,
-        z = ~ LogReturn) %>% add_surface() %>%
+        z = ~ LogReturn) %>% 
+  add_surface(colorscale = "mygbm") %>%
   layout(title = list(text = "Optimization Result - Training"))
 
 ```
@@ -909,11 +901,16 @@ plot_ly(x = ~ sentiment,
 
 Utilizing our sentiment indicators, we were not able to generate a portfolio that outperformed our baseline during the test period
 
--   Test window (2020-2023) suggests superior returns observed in the training window were spurious
+-   Assigning 72% weight to our Bing indicator and 28% weight our Afinn indicator (both NLP) yielded returns in the 99th percentile with variance in the 90th percentile (training)
+
+-   Test window (2020-2023) suggests superior returns observed in the training window were likely spurious
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
-sent_ret <- trade_func(port_y, 0, 0, 1) 
+sent_ret <- trade_func(port_y, .72, 0, .28) 
+#0.72
+#0.00
+#0.28
 
 naive_ret <- rebal_func(port_y) 
 
@@ -945,7 +942,7 @@ port_y_norm <- port_y %>%
          sentiment = sentiment/5) %>% 
   transmute(date, company, close = Close, y, prop_postive, mean_rating, sentiment, lag_close) %>% 
   drop_na() %>% 
-  mutate(comb_sent = 0*prop_postive + 0*mean_rating + 1*sentiment,
+  mutate(comb_sent = .72*prop_postive + 0*mean_rating + .28*sentiment,
          price_norm = 1 / lag_close) %>% 
   group_by(y) %>% 
   #weighted sentiment
@@ -975,9 +972,9 @@ weighted_returns <- port_y_norm %>%
   drop_na() %>% 
   summarise(logRet_sum = sum(logRet),
             var = var(logRet)) %>% 
-  mutate(prop = 0, 
+  mutate(prop = .72, 
          rate = 0,
-         sent = 1)
+         sent = .28)
   
 
   
@@ -1041,13 +1038,19 @@ portVal_plot <- weighted_close %>%
 
 ggplotly(portVal_plot)                              
 
+res_ntile <- res %>% 
+  mutate(rettile = ntile(logRet_sum, 100),
+         vartile = ntile(var, 100))
+
 ```
 
-### Review/Next Steps 
-The way in which we have captured sentiment and bound our review data to return data (i.e by year) has very little utility in terms of creating some sort of predicative model. It is clear that external firm specific factors have a much larger impact, such as commodity prices (although this is unsurprising). Still, we beilieve that high frequency GlassDoor reviews when combined with NLP have the potential to capture employee sentiment to proxy against excess returns. 
+### Review/Next Steps
 
-* Dynamics of sentiment trend corresponds with the economic environment, seemingly do contain trends in periods of large market swings and contain components that point to the fact that they are more than white noise. 
-* Further analysis would include a much broader subset of companies ideally with a higher number of reviews. 
-* We were constrained by the run time of our webscraping program. 
-* We would like to explore with different sectors (maybe there is a bigger impact in tech?).
-* Explore various machine learning techniques to see if there is model improvement. 
+The way in which we have captured sentiment and bound our review data to return data (i.e by year) has very little utility in terms of creating some sort of predicative model. It is clear that external firm specific factors have a much larger impact, such as commodity prices. Still, we beilieve that high frequency GlassDoor reviews when combined with NLP have the potential to capture employee sentiment to proxy against excess returns.
+
+-   Dynamics of sentiment trend correspond with the economic environment and contain characteristics that point to the fact that they are more than white noise.
+-   Further analysis would include a much broader subset of companies, ideally with a higher number of total reviews.
+    -   We were constrained by the run time of our webscraping program.
+-   We would like to explore with different sectors
+    -   There may be a bigger impact in service-based companies where revenues are less dependent on PPE and asset rights
+-   Explore various machine learning techniques to see if there is model improvement.
