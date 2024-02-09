@@ -404,7 +404,6 @@ weighted_returns <- port_y_norm %>%
 
 ```
 
-
 ```{r}
 # create a weighted portfolio that does not take into account sentiment and backtest it.
 
@@ -457,4 +456,3 @@ return(data)
 
 
 ```
-

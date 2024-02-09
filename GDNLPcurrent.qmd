@@ -505,75 +505,62 @@ out <- expand.grid(
   filter(total == 1)
   
 
-# system.time({ <expression> })
-library(foreach)
-library(doParallel)
-# Detect the number of cores on your computer
-n_cores <- detectCores() - 1
-# Assign cores and register the cluster
-cl <- makeCluster(n_cores)
-registerDoParallel(cl)
-# Loop using multipe clusters
-res <- foreach(
-  i = 1:nrow(out),
-  .combine = "cbind",
-  .packages = c(
-    "tidyverse",
-    "RTL",
-    "timetk",
-    "tidyquant",
-    "PerformanceAnalytics"
-  )
-) %dopar% {
-  as.numeric(RTL::tradeStats(
-    strategy(data_curr = train_cur,
-             data_signal = train_sig,
-             out[i, "roc1"],
-             out[i, "roc2"],
-             out[i, "alpha"],
-             out[i, "beta"])%>% dplyr::select(date, ret)
-  ))
-}
-stopCluster(cl)
 
-# system.time({ <expression> })
 library(foreach)
 library(doParallel)
-# Detect the number of cores on your computer
+
 n_cores <- detectCores() - 1
-# Assign cores and register the cluster
+
 cl <- makeCluster(n_cores)
 registerDoParallel(cl)
 
 res <- foreach(
-  i = 1:nrow(out),
-  .combine = "cbind",
-  .packages = c(
-    "tidyverse",
-    "RTL",
-    "timetk",
-    "tidyquant",
-    "PerformanceAnalytics"
-  )
+  combo = iter(out, by = 'row'), 
+  .combine = rbind,
+  .packages = c("dplyr", "tidyverse", "tidyquant", "PerformanceAnalytics") 
 ) %dopar% {
-  as.numeric(RTL::tradeStats(
-    strategy(data_curr = train_cur,
-             data_signal = train_sig,
-             out[i, "roc1"],
-             out[i, "roc2"],
-             out[i, "alpha"],
-             out[i, "beta"])%>% dplyr::select(date, ret)
-  ))
+
+  prop <- combo$prop
+  rate <- combo$rate
+  sent <- combo$sent
+  
+ 
+  trade_func(data = port_y, prop = prop, rate = rate, sent = sent)
 }
+
+
 stopCluster(cl)
 
 
 
 
 
+```
+```{r}
+library(foreach)
+library(doParallel)
+
+n_cores <- detectCores() - 1
+
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+res <- foreach(
+  combo = iter(out, by = 'row'), 
+  .combine = rbind,
+  .packages = c("dplyr", "tidyverse", "tidyquant", "PerformanceAnalytics") 
+) %dopar% {
+
+  prop <- combo$prop
+  rate <- combo$rate
+  sent <- combo$sent
+  
+ 
+  trade_func(data = port_y, prop = prop, rate = rate, sent = sent)
+}
 
 
-
+stopCluster(cl)
 
 ```
 
