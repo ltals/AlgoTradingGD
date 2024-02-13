@@ -12,7 +12,7 @@ Employees are the heart and soul of a business. Their actions and performance ar
 
 *Is there a relationship between employee sentiment and excess returns?*
 
-By building a webscraping program and applying it to GlassDoor, we were able to compile a comprehensive of employee reviews across a va of companies:
+By building a webscraping program and applying it to GlassDoor, we were able to compile a comprehensive list of employee reviews across a variety of companies:
 
 -   ExxonMobil (XOM)
 -   Chevron (CVX)
@@ -204,7 +204,7 @@ rev_base <- rbind(bp, chevron, exxon, shell) %>%
 
 ```
 
-We wanted to select companies that all operate in the same industry and differ by market cap. This ensures that our analysis truly represents differentiating factors in relation to excess returns.
+We wanted to select companies that all operate in the same industry and are exposed to similar factors that effect movements. This ensures that our analysis truly represents differentiation in relation to excess returns.
 
 Here is a chart showing how the review count changes through time, on a monthly basis. This is an important metric in how we selected our time frame for our analysis.
 
@@ -378,16 +378,38 @@ Just for fun, here is a wordcloud of different phrases:
 
 ```{r, fig.height = 8, fig.width = 10, echo=FALSE, message=FALSE, warning=FALSE}
 library(wordcloud2)
-ratings %>% 
+cloud <- ratings %>% 
   select(date, Company, reviewtext) %>%
   filter(date > "2013-12-31") %>% 
-  unnest_tokens(output = word, input = reviewtext, token = 'ngrams', n = 4) %>% count(word, sort = T) %>% 
-  drop_na() %>% wordcloud2()
+  unnest_tokens(output = word, input = reviewtext, token = 'ngrams', n = 4) %>%
+  count(word, sort = T) %>% 
+  drop_na() 
+
+wordcloud2(cloud)
 ```
 
 Overwhelmingly positive. Need to think about the people leaving negative reviews after lashing out emotionally, then going back and deleting them out of guilt (or to save face as a lot of reviews contain their roles).
 
-Even more fun, lets look at the negative ones: ![image](C:/Users\conno\OneDrive\Desktop\Winter%2024\FAT\cloud2.png)
+Even more fun, lets look at the negative ones: 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+neg_cloud <- ratings %>%
+  select(date, Company, reviewtext) %>%
+  filter(date > "2013-12-31") %>%
+  unnest_tokens(output = word, input = reviewtext, token = 'words') %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  filter(sentiment == "negative") %>%
+  count(word, sort = TRUE) %>%
+  drop_na() 
+
+library(ggwordcloud)
+
+# seemingly can't knit two wordclouds on the same doc
+
+ggplot(neg_cloud, aes(label = word, size = n, col = n)) +
+  geom_text_wordcloud() +
+  theme_minimal()
+```
 
 This is just the high frequency occurances. If you scroll through a table of the lowest rated sentiment words, it gets quite entertaining:
 
@@ -435,14 +457,14 @@ retMon4bind <- retMon %>%
 review_comb <- full_join(review_comb, retMon4bind, by = c('month', 'company'))
 ```
 
-We also utilized the star ratings that employees leave whenever a review is posted (ranging from 1 star to 5 stars). To organize our data into workable metrics. We used individual words instead of ngrams (collection of words or short sentences) as the bulk of the reviews are short and sometimes contain only one word. To summarize, we opted for the following:
+We also utilized the star ratings that employees leave whenever a review is posted (ranging from 1 star to 5 stars). To organize our data into workable metrics, we used individual words instead of ngrams (collection of words or short sentences) as the bulk of the reviews are short and sometimes contain only one word. To summarize, we opted for the following:
 
--   Grouped reviews into monthly, quarterly and annual bins.
--   Bing was organized into percentage of reviews that were deemed positive and averaged over monthly, quarterly and annual periods.
--   Afinn was organized into average total score over monthly, quarterly and annual periods.
--   Star ratings were averaged over monthly, quarterly and annual periods.
+-   Grouped reviews by year and averaged.
+-   Bing was organized into percentage of reviews that were deemed positive.
+-   Afinn was organized into average total score.
+-   Star ratings were averaged.
 
-Here are some visuals that are separated by company, depicting how these various metrics change through time. All charts use monthly data to help tell the story:
+Here are some visuals that are separated by company, depicting how these various metrics change through time. All charts use data aggregated by month to help tell the story:
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 review_comb %>% plot_ly(x = ~month,
